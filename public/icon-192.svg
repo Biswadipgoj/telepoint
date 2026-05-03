@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#eab308"/>
+  <path d="M96 32L48 60v72l48 28 48-28V60L96 32z" stroke="white" stroke-width="6" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="96" cy="84" r="16" fill="white"/>
+  <text x="96" y="148" text-anchor="middle" fill="white" font-size="24" font-family="system-ui" font-weight="bold">EMI</text>
+</svg>
