@@ -287,7 +287,7 @@ export default function RetailerDashboard() {
               <input
                 type="number"
                 value={collectionYear}
-                onChange={e => setCollectionYear(Number(e.target.value))}
+                onChange={e => setCollectionYear(Math.min(2099, Math.max(2020, Number(e.target.value) || new Date().getFullYear())))}
                 className="px-3 py-2 rounded-lg border border-surface-4 bg-surface-2 text-ink text-sm w-24 focus:outline-none focus:ring-2 focus:ring-brand-400"
                 min={2020}
                 max={2099}

@@ -70,7 +70,9 @@ export async function GET(req: NextRequest) {
     .eq('user_id', user.id)
     .single();
 
-  const isAdmin = profile?.role === 'super_admin';
+  // Every authenticated user must have a profile row
+  if (!profile) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const isAdmin = profile.role === 'super_admin';
   const svc = createServiceClient();
 
   const { searchParams } = new URL(req.url);
@@ -179,9 +181,9 @@ export async function GET(req: NextRequest) {
     return hasThisMonthEmi || hasPrevOverdue;
   });
 
-  // Sort: by emi_due_day ascending, then by first EMI date ascending
+  // Sort: by emi_due_day ascending (nulls last), then by first EMI date ascending
   included.sort((a, b) => {
-    const dayDiff = (a.emi_due_day ?? 0) - (b.emi_due_day ?? 0);
+    const dayDiff = (a.emi_due_day ?? 99) - (b.emi_due_day ?? 99);
     if (dayDiff !== 0) return dayDiff;
     const aFirst = (emisByCustomer.get(a.id) ?? []).find(e => e.emi_no === 1)?.due_date ?? '9999-99-99';
     const bFirst = (emisByCustomer.get(b.id) ?? []).find(e => e.emi_no === 1)?.due_date ?? '9999-99-99';
@@ -204,8 +206,8 @@ export async function GET(req: NextRequest) {
     const firstEmi = emis.find(e => e.emi_no === 1);
     const firstEmiDate = firstEmi?.due_date ? formatDMonYY(firstEmi.due_date) : '';
 
-    // Show 1st EMI charge only if not yet paid
-    const firstEmiCharge = c.first_emi_charge_paid_at ? '' : (c.first_emi_charge_amount || '');
+    // Show 1st EMI charge only if not yet paid (use ?? so amount=0 stays visible)
+    const firstEmiCharge = c.first_emi_charge_paid_at ? '' : (c.first_emi_charge_amount ?? '');
 
     // Fine Due: total outstanding fine on ALL overdue EMIs as of today
     const fineDue = calculateTotalFineFromEmis(emis as unknown as EMISchedule[], baseFine, weeklyIncrement);
