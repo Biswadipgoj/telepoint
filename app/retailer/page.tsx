@@ -40,6 +40,8 @@ export default function RetailerDashboard() {
     customer_name: string; imei: string; mobile: string;
   }[] | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [collectionMonth, setCollectionMonth] = useState(new Date().getMonth() + 1);
+  const [collectionYear, setCollectionYear] = useState(new Date().getFullYear());
 
   // Broadcast messages
   const [broadcastPopups, setBroadcastPopups] = useState<{ id: string; message: string; image_url?: string | null; expires_at: string; sender_name?: string; sender_role?: string }[]>([]);
@@ -88,31 +90,48 @@ export default function RetailerDashboard() {
     const sb = supabaseRef.current;
     const today = new Date().toISOString().split('T')[0];
     const in5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Fetch this retailer's RUNNING customers first (DB-level filter, no data leakage)
+    const { data: custData } = await sb
+      .from('customers')
+      .select('id, customer_name, imei, mobile')
+      .eq('retailer_id', retailerId)
+      .eq('status', 'RUNNING');
+
+    if (!custData || custData.length === 0) {
+      setUpcomingEmis([]);
+      setShowUpcoming(true);
+      return;
+    }
+
+    type CustInfo = { id: string; customer_name: string; imei: string; mobile: string };
+    const custIds = (custData as CustInfo[]).map(c => c.id);
+    const custMap = new Map<string, CustInfo>((custData as CustInfo[]).map(c => [c.id, c]));
+
     const { data } = await sb
       .from('emi_schedule')
-      .select(`id, emi_no, due_date, amount, customer:customers(customer_name, imei, mobile, retailer_id)`)
-      .in('status', ['UNPAID','PARTIALLY_PAID'])
+      .select('id, emi_no, due_date, amount, customer_id')
+      .in('customer_id', custIds)
+      .in('status', ['UNPAID', 'PARTIALLY_PAID'])
       .gte('due_date', today)
       .lte('due_date', in5)
       .order('due_date');
-    const filtered = (data || [])
-      .filter((row: Record<string, unknown>) => {
-        const cust = row.customer as { retailer_id?: string } | null;
-        return cust?.retailer_id === retailerId;
-      })
-      .map((row: Record<string, unknown>) => {
-        const cust = row.customer as { customer_name?: string; imei?: string; mobile?: string } | null;
-        return {
-          id: row.id as string,
-          emi_no: row.emi_no as number,
-          due_date: row.due_date as string,
-          amount: row.amount as number,
-          customer_name: cust?.customer_name || '',
-          imei: cust?.imei || '',
-          mobile: cust?.mobile || '',
-        };
-      });
-    setUpcomingEmis(filtered);
+
+    type EmiInfo = { id: string; emi_no: number; due_date: string; amount: number; customer_id: string };
+    const result = ((data || []) as EmiInfo[]).map(row => {
+      const cust = custMap.get(row.customer_id);
+      return {
+        id: row.id,
+        emi_no: row.emi_no,
+        due_date: row.due_date,
+        amount: row.amount,
+        customer_name: cust?.customer_name || '',
+        imei: cust?.imei || '',
+        mobile: cust?.mobile || '',
+      };
+    });
+
+    setUpcomingEmis(result);
     setShowUpcoming(true);
   }
 
@@ -245,21 +264,44 @@ export default function RetailerDashboard() {
           >
             🔔 Show Upcoming EMIs (Next 5 Days)
           </button>
-          <a href="/api/export?type=all" download="my-all-customers.xlsx"
-            className="px-3 py-2 rounded-xl border border-brand-400 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-all flex items-center gap-1.5 shadow-sm">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-            📗 All (Excel · 2 tabs)
-          </a>
-          <a href="/api/export?type=running" download="my-running-customers.csv"
-            className="px-3 py-2 rounded-xl border border-surface-4 hover:border-brand-300 text-ink-muted hover:text-brand-600 text-sm font-medium transition-all flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-            Running (CSV)
-          </a>
-          <a href="/api/export?type=complete" download="my-complete-customers.csv"
-            className="px-3 py-2 rounded-xl border border-surface-4 hover:border-brand-300 text-ink-muted hover:text-brand-600 text-sm font-medium transition-all flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-            Complete (CSV)
-          </a>
+        </div>
+
+        {/* Monthly EMI Collection Sheet */}
+        <div className="card p-4 mb-6">
+          <p className="text-sm font-semibold text-ink mb-3">📋 Monthly EMI Collection Sheet</p>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="text-xs text-ink-muted mb-1 block">Month</label>
+              <select
+                value={collectionMonth}
+                onChange={e => setCollectionMonth(Number(e.target.value))}
+                className="px-3 py-2 rounded-lg border border-surface-4 bg-surface-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              >
+                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                  <option key={i + 1} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-ink-muted mb-1 block">Year</label>
+              <input
+                type="number"
+                value={collectionYear}
+                onChange={e => setCollectionYear(Number(e.target.value))}
+                className="px-3 py-2 rounded-lg border border-surface-4 bg-surface-2 text-ink text-sm w-24 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                min={2020}
+                max={2099}
+              />
+            </div>
+            <a
+              href={`/api/export/collection?month=${collectionMonth}&year=${collectionYear}`}
+              download={`collection-${collectionYear}-${String(collectionMonth).padStart(2, '0')}.csv`}
+              className="px-4 py-2 rounded-xl border border-brand-400 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+              Download Collection Sheet (CSV)
+            </a>
+          </div>
         </div>
 
         {showUpcoming && upcomingEmis !== null && (
