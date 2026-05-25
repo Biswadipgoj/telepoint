@@ -40,8 +40,6 @@ export default function RetailerDashboard() {
     customer_name: string; imei: string; mobile: string;
   }[] | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
-  const [collectionMonth, setCollectionMonth] = useState(new Date().getMonth() + 1);
-  const [collectionYear, setCollectionYear] = useState(new Date().getFullYear());
 
   // Broadcast messages
   const [broadcastPopups, setBroadcastPopups] = useState<{ id: string; message: string; image_url?: string | null; expires_at: string; sender_name?: string; sender_role?: string }[]>([]);
@@ -264,44 +262,6 @@ export default function RetailerDashboard() {
           >
             🔔 Show Upcoming EMIs (Next 5 Days)
           </button>
-        </div>
-
-        {/* Monthly EMI Collection Sheet */}
-        <div className="card p-4 mb-6">
-          <p className="text-sm font-semibold text-ink mb-3">📋 Monthly EMI Collection Sheet</p>
-          <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="text-xs text-ink-muted mb-1 block">Month</label>
-              <select
-                value={collectionMonth}
-                onChange={e => setCollectionMonth(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg border border-surface-4 bg-surface-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-              >
-                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
-                  <option key={i + 1} value={i + 1}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-ink-muted mb-1 block">Year</label>
-              <input
-                type="number"
-                value={collectionYear}
-                onChange={e => setCollectionYear(Math.min(2099, Math.max(2020, Number(e.target.value) || new Date().getFullYear())))}
-                className="px-3 py-2 rounded-lg border border-surface-4 bg-surface-2 text-ink text-sm w-24 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                min={2020}
-                max={2099}
-              />
-            </div>
-            <a
-              href={`/api/export/collection?month=${collectionMonth}&year=${collectionYear}`}
-              download={`collection-${collectionYear}-${String(collectionMonth).padStart(2, '0')}.csv`}
-              className="px-4 py-2 rounded-xl border border-brand-400 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold transition-all flex items-center gap-1.5 shadow-sm"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-              Download Collection Sheet (CSV)
-            </a>
-          </div>
         </div>
 
         {showUpcoming && upcomingEmis !== null && (

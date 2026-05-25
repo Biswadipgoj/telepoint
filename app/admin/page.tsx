@@ -71,6 +71,7 @@ export default function AdminDashboard() {
   const [utrLoading, setUtrLoading] = useState(false);
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [collectionRetailerId, setCollectionRetailerId] = useState('');
 
   // Broadcast message state
   const [broadcastRetailerId, setBroadcastRetailerId] = useState('');
@@ -852,9 +853,24 @@ export default function AdminDashboard() {
             <div className="card p-6">
               {/* Monthly Collection Sheet — retailer-wise CSV */}
               <div className="card p-5 mb-6">
-                <p className="section-header">📋 Monthly Collection Sheet</p>
-                <p className="text-xs text-ink-muted mb-4">Download retailer-wise EMI collection sheet (same format as your existing CSV)</p>
+                <p className="section-header">📋 Monthly EMI Collection Sheet</p>
+                <p className="text-xs text-ink-muted mb-4">
+                  Per-retailer EMI collection sheet with Fine Due. Leave retailer as "All" to download all retailers in one file.
+                </p>
                 <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="label">Retailer</label>
+                    <select
+                      value={collectionRetailerId}
+                      onChange={e => setCollectionRetailerId(e.target.value)}
+                      className="input w-48"
+                    >
+                      <option value="">All Retailers</option>
+                      {retailers.filter(r => r.is_active).map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="label">Month</label>
                     <select value={reportMonth} onChange={e => setReportMonth(Number(e.target.value))} className="input w-36">
@@ -870,11 +886,14 @@ export default function AdminDashboard() {
                     </select>
                   </div>
                   <a
-                    href={'/api/report/monthly?month=' + reportMonth + '&year=' + reportYear}
+                    href={
+                      '/api/export/collection?month=' + reportMonth + '&year=' + reportYear +
+                      (collectionRetailerId ? '&retailer_id=' + collectionRetailerId : '')
+                    }
                     download
                     className="btn-primary"
                   >
-                    📥 Download CSV
+                    📥 Download Collection Sheet
                   </a>
                 </div>
               </div>
@@ -1456,6 +1475,7 @@ type MetricNumbers = {
   loanAmount: number;
   emiDue: number;
   fineDue: number;
+  firstEmiChargeDue: number;
   emiCollected: number;
   fineCollected: number;
 };
@@ -1488,7 +1508,7 @@ function MetricDashboard({
         byCustomer.set(e.customer_id, arr);
       }
 
-      let loanAmount = 0, emiDue = 0, fineDue = 0, emiCollected = 0, fineCollected = 0;
+      let loanAmount = 0, emiDue = 0, fineDue = 0, firstEmiChargeDue = 0, emiCollected = 0, fineCollected = 0;
 
       for (const c of (customers as Customer[]) || []) {
         const custEmis = byCustomer.get(c.id) || [];
@@ -1497,21 +1517,26 @@ function MetricDashboard({
           (s, e) => s + Math.max(0, Number(e.amount || 0) - Number(e.partial_paid_amount || 0)),
           0,
         );
+        const custFirstChargeDue =
+          !c.first_emi_charge_paid_at && Number(c.first_emi_charge_amount || 0) > 0
+            ? Number(c.first_emi_charge_amount)
+            : 0;
         const loanFinished = c.status !== 'RUNNING';
-        const allFinesCleared = custFineDue <= 0;
+        const allFinesCleared = custFineDue <= 0 && custFirstChargeDue <= 0;
         if (loanFinished && allFinesCleared) continue;
 
-        loanAmount   += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        emiDue       += custEmiDue;
-        fineDue      += custFineDue;
-        emiCollected += custEmis.reduce(
+        loanAmount        += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
+        emiDue            += custEmiDue;
+        fineDue           += custFineDue;
+        firstEmiChargeDue += custFirstChargeDue;
+        emiCollected      += custEmis.reduce(
           (s, e) => s + Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0)),
           0,
         );
         fineCollected += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
       }
 
-      setMetrics({ loanAmount, emiDue, fineDue, emiCollected, fineCollected });
+      setMetrics({ loanAmount, emiDue, fineDue, firstEmiChargeDue, emiCollected, fineCollected });
     } finally {
       setLoading(false);
     }
@@ -1519,18 +1544,19 @@ function MetricDashboard({
 
   useEffect(() => { load(); }, [load]);
 
-  const m = metrics || { loanAmount: 0, emiDue: 0, fineDue: 0, emiCollected: 0, fineCollected: 0 };
+  const m = metrics || { loanAmount: 0, emiDue: 0, fineDue: 0, firstEmiChargeDue: 0, emiCollected: 0, fineCollected: 0 };
   const totalLoanValue = m.loanAmount;
   const totalCollection = m.emiCollected + m.fineCollected;
-  const marketDue = m.emiDue + m.fineDue;
+  const marketDue = m.emiDue + m.fineDue + m.firstEmiChargeDue;
   const btd = totalLoanValue - totalCollection;
   const expectedRevenue = totalLoanValue + m.fineDue + m.fineCollected;
   const invDue = expectedRevenue - totalCollection;
   const collectionPct = totalLoanValue + m.fineDue > 0
     ? Math.min(100, Math.round((totalCollection / (totalLoanValue + m.fineDue + m.fineCollected)) * 100))
     : 0;
-  const marketPct = (m.emiDue + m.emiCollected) > 0
-    ? Math.min(100, Math.round((m.emiCollected / (m.emiCollected + m.emiDue)) * 100))
+  const marketTotal = m.emiCollected + m.emiDue + m.firstEmiChargeDue;
+  const marketPct = marketTotal > 0
+    ? Math.min(100, Math.round((m.emiCollected / marketTotal) * 100))
     : 0;
 
   return (
@@ -1556,7 +1582,7 @@ function MetricDashboard({
         />
         <MetricCard
           title="MARKET DUE"
-          formula="EMI Due + Fine Due"
+          formula="EMI Due + Fine Due + 1st EMI Charge"
           value={fmt(marketDue)}
           colorTheme="bg-amber-500/10 border-amber-500 text-amber-700"
           graphic="progress-ring"
