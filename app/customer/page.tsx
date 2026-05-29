@@ -204,17 +204,16 @@ export default function CustomerPortal() {
     // the customer pays everything outstanding up to and including this month only.
     const currentMonth = toISTDateString(new Date()).slice(0, 7);
 
-    const fineRows = sortedEmis.filter(e => !e.fine_waived).map(e => {
-      const fineTotal = Math.max(Number(e.fine_amount || 0), 0);
-      const finePaid = Math.max(Number(e.fine_paid_amount || 0), 0);
-      return {
-        emi_no: e.emi_no,
-        total: fineTotal,
-        paid: finePaid,
-        remaining: Math.max(0, fineTotal - finePaid),
-        status: fineTotal > 0 ? (finePaid === 0 ? 'DUE' : finePaid >= fineTotal ? 'PAID' : 'PARTIALLY_PAID') : 'NONE',
-      };
-    }).filter(r => r.total > 0 || r.paid > 0);
+    // Use the LIVE fine calculation (₹450 base + ₹25/week) — the same source the
+    // Fine Details card uses — so the fine added to the total never lags behind a
+    // stale stored fine_amount in the DB.
+    const fineRows = getPerEmiFineBreakdown(sortedEmis).map(r => ({
+      emi_no: r.emi_no,
+      total: r.totalFine,
+      paid: r.paid,
+      remaining: r.remaining,
+      status: r.totalFine > 0 ? (r.paid === 0 ? 'DUE' : r.paid >= r.totalFine ? 'PAID' : 'PARTIALLY_PAID') : 'NONE',
+    }));
 
     // All unpaid EMIs whose due month is the current month or earlier (no prepay of
     // future months). Each contributes its remaining balance after any partial payment.
