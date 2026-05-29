@@ -6,6 +6,7 @@ import { Customer, EMISchedule, DueBreakdown } from '@/lib/types';
 import { format, differenceInDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis, getPerEmiFineBreakdown } from '@/lib/fineCalc';
+import { toISTDateString } from '@/lib/ist';
 import BroadcastAnimator from '@/components/BroadcastAnimator';
 import SmartAlertPopup from '@/components/SmartAlertPopup';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
@@ -199,6 +200,10 @@ export default function CustomerPortal() {
     : null;
 
   const dueSummary = useMemo(() => {
+    // Current IST month boundary (YYYY-MM). Future months' EMIs are excluded —
+    // the customer pays everything outstanding up to and including this month only.
+    const currentMonth = toISTDateString(new Date()).slice(0, 7);
+
     const fineRows = sortedEmis.filter(e => !e.fine_waived).map(e => {
       const fineTotal = Math.max(Number(e.fine_amount || 0), 0);
       const finePaid = Math.max(Number(e.fine_paid_amount || 0), 0);
@@ -211,22 +216,58 @@ export default function CustomerPortal() {
       };
     }).filter(r => r.total > 0 || r.paid > 0);
 
-    const openEmi = sortedEmis.find(e => e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID');
-    const emiPaid = openEmi ? Math.max(0, Number(openEmi.partial_paid_amount || 0)) : 0;
-    const emiDue = openEmi ? Math.max(0, Number(openEmi.amount || 0) - emiPaid) : 0;
+    // All unpaid EMIs whose due month is the current month or earlier (no prepay of
+    // future months). Each contributes its remaining balance after any partial payment.
+    const dueEmis = sortedEmis.filter(e =>
+      (e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID') &&
+      toISTDateString(e.due_date).slice(0, 7) <= currentMonth,
+    );
+    const emiDue = dueEmis.reduce(
+      (sum, e) => sum + Math.max(0, Number(e.amount || 0) - Math.max(0, Number(e.partial_paid_amount || 0))),
+      0,
+    );
+    const emiPaid = dueEmis.reduce((sum, e) => sum + Math.max(0, Number(e.partial_paid_amount || 0)), 0);
+    const dueEmiNos = dueEmis.map(e => e.emi_no);
+
     const totalFineRemaining = fineRows.reduce((sum, row) => sum + row.remaining, 0);
+    const fineEmiNos = fineRows.filter(r => r.remaining > 0).map(r => r.emi_no);
     const firstChargeDue = customer?.first_emi_charge_paid_at ? 0 : Number(customer?.first_emi_charge_amount || 0);
+
+    const earliestDueEmi = dueEmis[0];
     return {
       emiDue,
       emiPaid,
+      dueEmiNos,
       totalFineRemaining,
       fineRows,
+      fineEmiNos,
       firstChargeDue,
       totalDue: emiDue + totalFineRemaining + firstChargeDue,
-      nextDueDate: openEmi?.due_date || breakdown?.next_emi_due_date,
-      nextEmiNo: openEmi?.emi_no || breakdown?.next_emi_no,
+      nextDueDate: earliestDueEmi?.due_date || breakdown?.next_emi_due_date,
+      nextEmiNo: earliestDueEmi?.emi_no || breakdown?.next_emi_no,
     };
   }, [sortedEmis, breakdown, customer]);
+
+  // UPI reference note: lists the EMI numbers being paid + IMEI, and (if any
+  // fine is included) which EMIs the fine belongs to. Example:
+  //   "EMI 3 IMEI 123456789012345 | Fine of EMI 2,3"
+  function buildUpiNote(): string {
+    const parts: string[] = [];
+    if (dueSummary.dueEmiNos.length > 0) {
+      parts.push(`EMI ${dueSummary.dueEmiNos.join(',')} IMEI ${customer?.imei || ''}`.trim());
+    } else if (customer?.imei) {
+      parts.push(`IMEI ${customer.imei}`);
+    }
+    if (dueSummary.totalFineRemaining > 0 && dueSummary.fineEmiNos.length > 0) {
+      parts.push(`Fine of EMI ${dueSummary.fineEmiNos.join(',')}`);
+    }
+    if (dueSummary.firstChargeDue > 0) {
+      parts.push('1st EMI charge');
+    }
+    const note = parts.join(' | ') || `EMI ${customer?.customer_name || ''}`.trim();
+    // UPI tn (transaction note) practical limit is short; keep it well under to be safe.
+    return note.slice(0, 80);
+  }
 
   async function buildReceiptFile(totalAmount: number) {
     const canvas = document.createElement('canvas');
@@ -297,7 +338,8 @@ export default function CustomerPortal() {
   async function handleOnlinePay() {
     if (!customer || dueSummary.totalDue <= 0) return;
     const amount = Number(dueSummary.totalDue.toFixed(2));
-    const upiUrl = `upi://pay?pa=7003617029@upi&pn=TelePoint&am=${amount}&cu=INR&tn=${encodeURIComponent(`EMI ${customer.customer_name}`)}`;
+    const note = buildUpiNote();
+    const upiUrl = `upi://pay?pa=7003617029@upi&pn=TelePoint&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
     setPendingWhatsappShare(true);
     setIsLaunchingUpi(true);
     window.location.href = upiUrl;
@@ -647,15 +689,30 @@ export default function CustomerPortal() {
             <div className="card p-5">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4">Next Payment Due</p>
               <div className="space-y-2.5">
-                {dueSummary.emiDue > 0 && <div className="flex justify-between text-sm"><span className="text-slate-400">EMI #{dueSummary.nextEmiNo || breakdown?.next_emi_no}</span><span className="font-num text-ink">{fmt(dueSummary.emiDue)}</span></div>}
-                {dueSummary.emiPaid > 0 && <div className="flex justify-between text-sm"><span className="text-amber-600">Already paid for this EMI</span><span className="font-num text-amber-600">{fmt(dueSummary.emiPaid)}</span></div>}
-                {dueSummary.totalFineRemaining > 0 && <div className="flex justify-between text-sm"><span className="text-crimson-400">Fine due</span><span className="font-num text-crimson-400">{fmt(dueSummary.totalFineRemaining)}</span></div>}
+                {dueSummary.emiDue > 0 && <div className="flex justify-between text-sm"><span className="text-slate-400">{dueSummary.dueEmiNos.length > 1 ? `EMI #${dueSummary.dueEmiNos.join(', #')}` : `EMI #${dueSummary.nextEmiNo || breakdown?.next_emi_no}`}</span><span className="font-num text-ink">{fmt(dueSummary.emiDue)}</span></div>}
+                {dueSummary.emiPaid > 0 && <div className="flex justify-between text-sm"><span className="text-amber-600">Already paid towards these EMIs</span><span className="font-num text-amber-600">{fmt(dueSummary.emiPaid)}</span></div>}
+                {dueSummary.totalFineRemaining > 0 && <div className="flex justify-between text-sm"><span className="text-crimson-400">Fine due{dueSummary.fineEmiNos.length > 0 ? ` (EMI ${dueSummary.fineEmiNos.join(',')})` : ''}</span><span className="font-num text-crimson-400">{fmt(dueSummary.totalFineRemaining)}</span></div>}
                 {dueSummary.firstChargeDue > 0 && <div className="flex justify-between text-sm"><span className="text-gold-400">1st EMI charge</span><span className="font-num text-gold-400">{fmt(dueSummary.firstChargeDue)}</span></div>}
                 <div className="h-px bg-white/[0.06]" />
                 <div className="flex justify-between"><span className="font-semibold text-ink">Total Payable</span><span className="font-num text-xl font-bold text-gold-400">{fmt(totalDue)}</span></div>
               </div>
               {dueSummary.nextDueDate && <p className="text-xs text-slate-500 mt-3">Due: {format(new Date(dueSummary.nextDueDate), 'd MMM yyyy')}</p>}
-              <p className="text-xs text-slate-600 mt-2">Pay online via UPI and auto-share receipt on WhatsApp.</p>
+
+              <button
+                onClick={handleOnlinePay}
+                disabled={isLaunchingUpi}
+                className="btn-primary w-full py-3.5 text-base mt-4 flex items-center justify-center gap-2"
+              >
+                {isLaunchingUpi ? 'Opening UPI app…' : `Pay ${fmt(totalDue)} Online`}
+              </button>
+
+              <div className="mt-3 rounded-xl bg-surface-2 border border-surface-4 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-0.5">UPI reference</p>
+                <p className="text-xs text-slate-400 break-words font-num">{buildUpiNote()}</p>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-2 leading-relaxed">
+                Opens your UPI app with the amount and reference pre-filled. This does not update your account — payment reflects in 1–2 days after verification.
+              </p>
             </div>
           ) : null;
         })()}
