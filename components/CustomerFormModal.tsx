@@ -166,8 +166,8 @@ export default function CustomerFormModal({
     if (!form.emi_amount || parseFloat(form.emi_amount) <= 0)
       errs.emi_amount = 'EMI amount is required';
 
-    if (!form.emi_due_day || parseInt(form.emi_due_day) < 1 || parseInt(form.emi_due_day) > 28)
-      errs.emi_due_day = 'EMI due day must be between 1 and 28';
+    if (!form.emi_due_day || parseInt(form.emi_due_day) < 1 || parseInt(form.emi_due_day) > 30)
+      errs.emi_due_day = 'EMI due day must be between 1 and 30';
 
     // ── IMAGE tab — only validate format if something was entered ──
     if (form.customer_photo_url && !isValidUrl(form.customer_photo_url))
@@ -470,10 +470,10 @@ export default function CustomerFormModal({
                     {/* EMI due day */}
                     <div>
                       <label className="label">
-                        EMI Due Day (1–28) <span className="text-danger">*</span>
+                        EMI Due Day (1–30) <span className="text-danger">*</span>
                       </label>
                       <input
-                        type="number" min={1} max={28}
+                        type="number" min={1} max={30}
                         value={form.emi_due_day}
                         onChange={e => set('emi_due_day', e.target.value)}
                         className={`input ${errors.emi_due_day ? 'border-danger' : ''}`}

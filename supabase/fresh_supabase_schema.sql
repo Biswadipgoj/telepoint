@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS customers (
   disburse_amount          NUMERIC(12,2),
   purchase_date            DATE NOT NULL,
   emi_start_date           DATE,
-  emi_due_day              INT CHECK (emi_due_day BETWEEN 1 AND 28),
+  emi_due_day              INT CHECK (emi_due_day BETWEEN 1 AND 30),
   emi_amount               NUMERIC(12,2) NOT NULL,
   emi_tenure               INT NOT NULL CHECK (emi_tenure BETWEEN 1 AND 12),
   first_emi_charge_amount  NUMERIC(12,2) DEFAULT 0,
@@ -279,10 +279,12 @@ $$;
 CREATE OR REPLACE FUNCTION fn_generate_emi_schedule()
 RETURNS TRIGGER AS $$
 DECLARE
-  v_start_date DATE;
-  v_due_day    INT;
-  v_i          INT;
-  v_due_date   DATE;
+  v_start_date  DATE;
+  v_due_day     INT;
+  v_i           INT;
+  v_due_date    DATE;
+  v_month_start DATE;
+  v_last_day    DATE;
 BEGIN
   -- Calculate start date from emi_start_date or purchase_date
   v_start_date := COALESCE(NEW.emi_start_date, NEW.purchase_date);
@@ -302,9 +304,12 @@ BEGIN
 
   FOR v_i IN 1..NEW.emi_tenure LOOP
     -- Calculate due date: first EMI = start_date + 1 month adjusted to due_day
-    v_due_date := (v_start_date + (v_i || ' months')::INTERVAL)::DATE;
-    -- Adjust to emi_due_day within same month
-    v_due_date := DATE_TRUNC('month', v_due_date)::DATE + (v_due_day - 1);
+    v_month_start := DATE_TRUNC('month', (v_start_date + (v_i || ' months')::INTERVAL))::DATE;
+    -- Last calendar day of that month (handles Feb / 30-day months)
+    v_last_day    := (v_month_start + INTERVAL '1 month - 1 day')::DATE;
+    -- Adjust to emi_due_day, clamping to month end when the day overflows
+    -- (e.g. due_day 30 in February falls back to 28/29).
+    v_due_date    := LEAST(v_month_start + (v_due_day - 1), v_last_day);
 
     -- Only insert if this EMI doesn't already exist
     INSERT INTO emi_schedule (customer_id, emi_no, due_date, amount)

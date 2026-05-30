@@ -96,8 +96,15 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
       for (const c of customerList) {
         const cEmis = byCustomer.get(c.id) ?? [];
         const cFineDue = calculateTotalFineFromEmis(cEmis, baseFine, weeklyIncrement);
+        // An APPROVED EMI is fully paid even if partial_paid_amount was never
+        // written (settlement / direct-approve paths set status only), so count
+        // its full amount as collected rather than leaving it perpetually due.
+        const emiPaid = (e: EMISchedule) =>
+          e.status === 'APPROVED'
+            ? Number(e.amount || 0)
+            : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
         const cEmiDue = cEmis.reduce(
-          (s, e) => s + Math.max(0, Number(e.amount || 0) - Number(e.partial_paid_amount || 0)),
+          (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
           0,
         );
         const loanFinished = c.status !== 'RUNNING';
@@ -107,10 +114,7 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
         if (c.status === 'RUNNING') runningCount += 1;
 
         loanAmount += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        collected += cEmis.reduce(
-          (s, e) => s + Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0)),
-          0,
-        );
+        collected += cEmis.reduce((s, e) => s + emiPaid(e), 0);
         emiDue += cEmiDue;
         fineDue += cFineDue;
         fineCollected += cEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
