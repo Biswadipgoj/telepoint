@@ -1513,8 +1513,15 @@ function MetricDashboard({
       for (const c of (customers as Customer[]) || []) {
         const custEmis = byCustomer.get(c.id) || [];
         const custFineDue = calculateTotalFineFromEmis(custEmis, baseFine, weeklyIncrement);
+        // An APPROVED EMI is fully paid even if partial_paid_amount was never
+        // written (e.g. settlement / direct-approve paths set status only).
+        // Treat it as the full amount so collection reflects real payments.
+        const emiPaid = (e: EMISchedule) =>
+          e.status === 'APPROVED'
+            ? Number(e.amount || 0)
+            : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
         const custEmiDue = custEmis.reduce(
-          (s, e) => s + Math.max(0, Number(e.amount || 0) - Number(e.partial_paid_amount || 0)),
+          (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
           0,
         );
         const custFirstChargeDue =
@@ -1529,10 +1536,7 @@ function MetricDashboard({
         emiDue            += custEmiDue;
         fineDue           += custFineDue;
         firstEmiChargeDue += custFirstChargeDue;
-        emiCollected      += custEmis.reduce(
-          (s, e) => s + Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0)),
-          0,
-        );
+        emiCollected      += custEmis.reduce((s, e) => s + emiPaid(e), 0);
         fineCollected += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
       }
 
