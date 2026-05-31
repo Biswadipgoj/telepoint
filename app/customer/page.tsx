@@ -880,24 +880,22 @@ export default function CustomerPortal() {
         <p className="text-center text-xs text-slate-700 pb-4">Read-only view · TelePoint EMI Portal</p>
       </div>
 
-      {/* Fixed pay bar — always present so the customer can pay from anywhere on the page */}
-      {dueSummary.totalDue > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-surface-4 bg-white/95 backdrop-blur-md" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-none">Total payable</p>
-              <p className="font-num text-lg font-bold text-ink leading-tight mt-0.5">{fmt(dueSummary.totalDue)}</p>
-            </div>
-            <button
-              onClick={handleOnlinePay}
-              disabled={isLaunchingUpi}
-              className="btn-primary flex-1 py-3.5 text-base flex items-center justify-center gap-2"
-            >
-              {isLaunchingUpi ? 'Opening UPI app…' : 'Pay using UPI'}
-            </button>
+      {/* Fixed pay bar — always present at the bottom so the customer can pay from anywhere on the page */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-surface-4 bg-white/95 backdrop-blur-md" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-none">Total payable</p>
+            <p className="font-num text-lg font-bold text-ink leading-tight mt-0.5">{fmt(dueSummary.totalDue)}</p>
           </div>
+          <button
+            onClick={handleOnlinePay}
+            disabled={isLaunchingUpi || dueSummary.totalDue <= 0}
+            className="btn-primary flex-1 py-3.5 text-base flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {isLaunchingUpi ? 'Opening UPI app…' : dueSummary.totalDue > 0 ? 'Pay using UPI' : 'No payment due'}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
