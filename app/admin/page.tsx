@@ -1587,9 +1587,25 @@ function MetricDashboard({
             Active loans + any finished loans still carrying unpaid fines
           </p>
         </div>
-        <button onClick={load} className="text-xs text-brand-600 underline underline-offset-4">
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/fines/recalc', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { toast.error(data.error || 'Recalc failed'); return; }
+                toast.success(`Fines updated (${data.updated ?? 0} EMIs)`);
+                await load();
+              } catch { toast.error('Recalc failed'); }
+            }}
+            className="text-xs text-amber-600 underline underline-offset-4"
+          >
+            Recalc fines
+          </button>
+          <button onClick={load} className="text-xs text-brand-600 underline underline-offset-4">
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <MetricCard
