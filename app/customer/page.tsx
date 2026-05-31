@@ -338,7 +338,7 @@ export default function CustomerPortal() {
     if (!customer || dueSummary.totalDue <= 0) return;
     const amount = Number(dueSummary.totalDue.toFixed(2));
     const note = buildUpiNote();
-    const upiUrl = `upi://pay?pa=7003617029@upi&pn=TelePoint&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
+    const upiUrl = `upi://pay?pa=biswajit.khanra82@ybl&pn=TelePoint&am=${amount}&cu=INR&tn=${encodeURIComponent(note)}`;
     setPendingWhatsappShare(true);
     setIsLaunchingUpi(true);
     window.location.href = upiUrl;
