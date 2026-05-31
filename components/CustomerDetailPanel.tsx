@@ -88,20 +88,21 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
       {/* Header row */}
       <div className="flex items-start gap-4 p-5 border-b border-surface-4">
         {/* Photo */}
-        {customer.customer_photo_url ? (
-          <img
-            src={ibbDirect(customer.customer_photo_url)}
-            alt="Photo"
-            className="w-20 h-20 rounded-2xl object-cover border border-surface-4 flex-shrink-0"
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        ) : (
-          <div className="w-20 h-20 rounded-2xl bg-surface-3 border border-surface-4 flex items-center justify-center flex-shrink-0">
+        <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden">
+          <div className="absolute inset-0 bg-surface-3 flex items-center justify-center">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
               <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
             </svg>
           </div>
-        )}
+          {customer.customer_photo_url && (
+            <img
+              src={ibbDirect(customer.customer_photo_url)}
+              alt="Photo"
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
+        </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 flex-wrap">
