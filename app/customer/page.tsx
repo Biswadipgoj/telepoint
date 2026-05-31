@@ -520,7 +520,7 @@ export default function CustomerPortal() {
         </div>
       </nav>
 
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5 pb-32">
 
         {/* Install App Prompt — shows on mobile when token-based and not installed as PWA */}
         {typeof window !== 'undefined' && localStorage.getItem(TOKEN_KEY) && !window.matchMedia('(display-mode: standalone)').matches && (
@@ -697,20 +697,12 @@ export default function CustomerPortal() {
               </div>
               {dueSummary.nextDueDate && <p className="text-xs text-slate-500 mt-3">Due: {format(new Date(dueSummary.nextDueDate), 'd MMM yyyy')}</p>}
 
-              <button
-                onClick={handleOnlinePay}
-                disabled={isLaunchingUpi}
-                className="btn-primary w-full py-3.5 text-base mt-4 flex items-center justify-center gap-2"
-              >
-                {isLaunchingUpi ? 'Opening UPI app…' : `Pay ${fmt(totalDue)} Online`}
-              </button>
-
-              <div className="mt-3 rounded-xl bg-surface-2 border border-surface-4 px-3 py-2">
+              <div className="mt-4 rounded-xl bg-surface-2 border border-surface-4 px-3 py-2">
                 <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-0.5">UPI reference</p>
                 <p className="text-xs text-slate-400 break-words font-num">{buildUpiNote()}</p>
               </div>
               <p className="text-[11px] text-slate-600 mt-2 leading-relaxed">
-                Opens your UPI app with the amount and reference pre-filled. This does not update your account — payment reflects in 1–2 days after verification.
+                Pay using any UPI app. Status updates after verification.
               </p>
             </div>
           ) : null;
@@ -887,6 +879,25 @@ export default function CustomerPortal() {
         </div>
         <p className="text-center text-xs text-slate-700 pb-4">Read-only view · TelePoint EMI Portal</p>
       </div>
+
+      {/* Fixed pay bar — always present so the customer can pay from anywhere on the page */}
+      {dueSummary.totalDue > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-surface-4 bg-white/95 backdrop-blur-md" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-none">Total payable</p>
+              <p className="font-num text-lg font-bold text-ink leading-tight mt-0.5">{fmt(dueSummary.totalDue)}</p>
+            </div>
+            <button
+              onClick={handleOnlinePay}
+              disabled={isLaunchingUpi}
+              className="btn-primary flex-1 py-3.5 text-base flex items-center justify-center gap-2"
+            >
+              {isLaunchingUpi ? 'Opening UPI app…' : 'Pay using UPI'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
