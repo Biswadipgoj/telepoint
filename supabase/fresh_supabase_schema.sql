@@ -451,6 +451,112 @@ END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- ============================================================
+-- SECTION 6b: DB-level fine persistence
+-- Writes the calculated late fine back into emi_schedule so the stored
+-- fine_amount never goes stale. Same rules as lib/fineCalc.ts and
+-- get_due_breakdown. Fine never decreases (preserves manual overrides).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION recalc_customer_fines(p_customer_id UUID)
+RETURNS INT AS $$
+DECLARE
+  v_base_fine   NUMERIC := 450;
+  v_weekly      NUMERIC := 25;
+  v_max_emi_no  INT;
+  v_row         RECORD;
+  v_days        INT;
+  v_weeks       INT;
+  v_calc        NUMERIC;
+  v_new         NUMERIC;
+  v_updated     INT := 0;
+  v_pending_fine BOOLEAN := FALSE;
+  v_customer    RECORD;
+BEGIN
+  SELECT COALESCE(default_fine_amount, 450), COALESCE(weekly_fine_increment, 25)
+  INTO v_base_fine, v_weekly
+  FROM fine_settings WHERE id = 1;
+
+  SELECT MAX(emi_no) INTO v_max_emi_no
+  FROM emi_schedule WHERE customer_id = p_customer_id;
+
+  FOR v_row IN
+    SELECT * FROM emi_schedule
+    WHERE customer_id = p_customer_id
+      AND fine_waived = FALSE
+      AND status <> 'PENDING_APPROVAL'
+      AND (
+        (status IN ('UNPAID', 'PARTIALLY_PAID') AND due_date < CURRENT_DATE)
+        OR (COALESCE(fine_amount, 0) > COALESCE(fine_paid_amount, 0))
+      )
+  LOOP
+    v_days := GREATEST(0, (CURRENT_DATE - v_row.due_date)::INT);
+
+    IF v_days = 0 THEN
+      v_calc := COALESCE(v_row.fine_amount, 0);
+    ELSIF v_row.emi_no = v_max_emi_no AND v_row.status <> 'APPROVED' THEN
+      v_calc := CEIL(v_days::NUMERIC / 30) * v_base_fine;
+    ELSIF v_days <= 30 THEN
+      v_calc := v_base_fine;
+    ELSE
+      v_weeks := FLOOR((v_days - 30)::NUMERIC / 7);
+      v_calc := v_base_fine + (v_weeks * v_weekly);
+    END IF;
+
+    v_new := GREATEST(v_calc, COALESCE(v_row.fine_amount, 0));
+
+    IF v_new <> COALESCE(v_row.fine_amount, 0) THEN
+      UPDATE emi_schedule
+      SET fine_amount             = v_new,
+          fine_last_calculated_at = NOW(),
+          updated_at              = NOW()
+      WHERE id = v_row.id;
+      v_updated := v_updated + 1;
+    END IF;
+
+    IF v_new > COALESCE(v_row.fine_paid_amount, 0) THEN
+      v_pending_fine := TRUE;
+    END IF;
+  END LOOP;
+
+  SELECT * INTO v_customer FROM customers WHERE id = p_customer_id;
+  IF FOUND AND v_customer.status = 'COMPLETE' AND v_pending_fine THEN
+    UPDATE customers
+    SET status = 'RUNNING', completion_date = NULL, updated_at = NOW()
+    WHERE id = p_customer_id;
+  END IF;
+
+  RETURN v_updated;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION recalc_all_fines()
+RETURNS INT AS $$
+DECLARE
+  v_cust   UUID;
+  v_total  INT := 0;
+BEGIN
+  FOR v_cust IN
+    SELECT DISTINCT c.id
+    FROM customers c
+    JOIN emi_schedule e ON e.customer_id = c.id
+    WHERE c.status IN ('RUNNING', 'COMPLETE')
+      AND e.fine_waived = FALSE
+      AND e.status <> 'PENDING_APPROVAL'
+      AND (
+        (e.status IN ('UNPAID', 'PARTIALLY_PAID') AND e.due_date < CURRENT_DATE)
+        OR (COALESCE(e.fine_amount, 0) > COALESCE(e.fine_paid_amount, 0))
+      )
+  LOOP
+    v_total := v_total + recalc_customer_fines(v_cust);
+  END LOOP;
+  RETURN v_total;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION recalc_customer_fines(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION recalc_all_fines()          TO service_role;
+
+-- ============================================================
 -- SECTION 7: approve_payment_request — ATOMIC RPC
 -- Called by admin to approve a payment in a single transaction
 -- ============================================================

@@ -43,6 +43,7 @@ interface Totals {
   fineDue: number;
   fineCollected: number;
   firstChargeDue: number;
+  firstChargeCollected: number;
   upcoming30d: number;
   overdueCustomers: number;
 }
@@ -66,7 +67,7 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
       if (!customerList.length) {
         setTotals({
           customerCount: 0, runningCount: 0, loanAmount: 0, collected: 0,
-          emiDue: 0, fineDue: 0, fineCollected: 0, firstChargeDue: 0,
+          emiDue: 0, fineDue: 0, fineCollected: 0, firstChargeDue: 0, firstChargeCollected: 0,
           upcoming30d: 0, overdueCustomers: 0,
         });
         return;
@@ -90,7 +91,7 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
       const in30Ms = todayMs + 30 * 86_400_000;
 
       let loanAmount = 0, collected = 0, emiDue = 0, fineDue = 0, fineCollected = 0,
-          firstChargeDue = 0, upcoming30d = 0, overdueCustomers = 0;
+          firstChargeDue = 0, firstChargeCollected = 0, upcoming30d = 0, overdueCustomers = 0;
       let runningCount = 0;
 
       for (const c of customerList) {
@@ -119,8 +120,12 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
         fineDue += cFineDue;
         fineCollected += cEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
 
-        if (Number(c.first_emi_charge_amount || 0) > 0 && !c.first_emi_charge_paid_at) {
-          firstChargeDue += Number(c.first_emi_charge_amount);
+        // 1st EMI charge has both a due and a collected side; track both so it
+        // is reflected in total collection once paid.
+        const chargeAmount = Number(c.first_emi_charge_amount || 0);
+        if (chargeAmount > 0) {
+          if (c.first_emi_charge_paid_at) firstChargeCollected += chargeAmount;
+          else firstChargeDue += chargeAmount;
         }
 
         let custOverdue = false;
@@ -144,6 +149,7 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
         fineDue,
         fineCollected,
         firstChargeDue,
+        firstChargeCollected,
         upcoming30d,
         overdueCustomers,
       });
@@ -156,11 +162,12 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
 
   const t = totals ?? {
     customerCount: 0, runningCount: 0, loanAmount: 0, collected: 0,
-    emiDue: 0, fineDue: 0, fineCollected: 0, firstChargeDue: 0,
+    emiDue: 0, fineDue: 0, fineCollected: 0, firstChargeDue: 0, firstChargeCollected: 0,
     upcoming30d: 0, overdueCustomers: 0,
   };
-  const totalRevenueExpected = t.loanAmount + t.fineDue + t.fineCollected;
-  const totalRevenueCollected = t.collected + t.fineCollected;
+  const totalRevenueExpected =
+    t.loanAmount + t.fineDue + t.fineCollected + t.firstChargeDue + t.firstChargeCollected;
+  const totalRevenueCollected = t.collected + t.fineCollected + t.firstChargeCollected;
   const collectionPct = totalRevenueExpected > 0
     ? Math.min(100, Math.round((totalRevenueCollected / totalRevenueExpected) * 100))
     : 0;
@@ -183,7 +190,7 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-4">
         <Tile tint="violet" emoji="💰" label="Loan Book" value={fmt(t.loanAmount)} sub="Total disbursed (active)" />
-        <Tile tint="emerald" emoji="✓" label="Collected" value={fmt(totalRevenueCollected)} sub="EMI + Fines" />
+        <Tile tint="emerald" emoji="✓" label="Collected" value={fmt(totalRevenueCollected)} sub="EMI + Fines + 1st Charge" />
         <Tile tint={t.emiDue > 0 ? 'rose' : 'emerald'} emoji="⏳" label="EMI Due" value={fmt(t.emiDue)} sub={`${t.overdueCustomers} customer${t.overdueCustomers === 1 ? '' : 's'} overdue`} />
         <Tile tint={t.fineDue > 0 ? 'rose' : 'emerald'} emoji="⚠" label="Fine Due" value={fmt(t.fineDue)} sub={`Paid ${fmt(t.fineCollected)} so far`} />
       </div>

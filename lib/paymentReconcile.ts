@@ -239,6 +239,11 @@ export async function reverseApprovedRequestEffects(svc: Svc, request: RequestRo
 }
 
 export async function recomputeCustomerCompletion(svc: Svc, customerId: string) {
+  // Persist any accrued late fine first so the completion decision below reads
+  // a fresh stored fine_amount rather than a stale one (which could otherwise
+  // mark a customer COMPLETE while a fine is still outstanding).
+  await svc.rpc('recalc_customer_fines', { p_customer_id: customerId }).then(() => null).catch(() => null);
+
   const { data: customer } = await svc.from('customers')
     .select('id, status, first_emi_charge_amount, first_emi_charge_paid_at')
     .eq('id', customerId)

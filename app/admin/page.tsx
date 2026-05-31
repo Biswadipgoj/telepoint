@@ -1478,6 +1478,7 @@ type MetricNumbers = {
   firstEmiChargeDue: number;
   emiCollected: number;
   fineCollected: number;
+  firstEmiChargeCollected: number;
 };
 
 function MetricDashboard({
@@ -1508,39 +1509,47 @@ function MetricDashboard({
         byCustomer.set(e.customer_id, arr);
       }
 
-      let loanAmount = 0, emiDue = 0, fineDue = 0, firstEmiChargeDue = 0, emiCollected = 0, fineCollected = 0;
+      let loanAmount = 0, emiDue = 0, fineDue = 0, firstEmiChargeDue = 0,
+          emiCollected = 0, fineCollected = 0, firstEmiChargeCollected = 0;
+
+      // An APPROVED EMI is fully paid even if partial_paid_amount was never
+      // written (e.g. settlement / direct-approve paths set status only).
+      // Treat it as the full amount so collection reflects real payments.
+      const emiPaid = (e: EMISchedule) =>
+        e.status === 'APPROVED'
+          ? Number(e.amount || 0)
+          : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
 
       for (const c of (customers as Customer[]) || []) {
         const custEmis = byCustomer.get(c.id) || [];
         const custFineDue = calculateTotalFineFromEmis(custEmis, baseFine, weeklyIncrement);
-        // An APPROVED EMI is fully paid even if partial_paid_amount was never
-        // written (e.g. settlement / direct-approve paths set status only).
-        // Treat it as the full amount so collection reflects real payments.
-        const emiPaid = (e: EMISchedule) =>
-          e.status === 'APPROVED'
-            ? Number(e.amount || 0)
-            : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
         const custEmiDue = custEmis.reduce(
           (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
           0,
         );
-        const custFirstChargeDue =
-          !c.first_emi_charge_paid_at && Number(c.first_emi_charge_amount || 0) > 0
-            ? Number(c.first_emi_charge_amount)
-            : 0;
+
+        // 1st EMI charge: a one-time charge with both a due and a collected
+        // side. Previously only the due side was tracked, so paid charges
+        // silently dropped out of total collection.
+        const chargeAmount = Number(c.first_emi_charge_amount || 0);
+        const chargePaid = !!c.first_emi_charge_paid_at;
+        const custFirstChargeDue = chargeAmount > 0 && !chargePaid ? chargeAmount : 0;
+        const custFirstChargeCollected = chargeAmount > 0 && chargePaid ? chargeAmount : 0;
+
         const loanFinished = c.status !== 'RUNNING';
         const allFinesCleared = custFineDue <= 0 && custFirstChargeDue <= 0;
         if (loanFinished && allFinesCleared) continue;
 
-        loanAmount        += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        emiDue            += custEmiDue;
-        fineDue           += custFineDue;
-        firstEmiChargeDue += custFirstChargeDue;
-        emiCollected      += custEmis.reduce((s, e) => s + emiPaid(e), 0);
-        fineCollected += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
+        loanAmount              += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
+        emiDue                  += custEmiDue;
+        fineDue                 += custFineDue;
+        firstEmiChargeDue       += custFirstChargeDue;
+        emiCollected            += custEmis.reduce((s, e) => s + emiPaid(e), 0);
+        fineCollected           += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
+        firstEmiChargeCollected += custFirstChargeCollected;
       }
 
-      setMetrics({ loanAmount, emiDue, fineDue, firstEmiChargeDue, emiCollected, fineCollected });
+      setMetrics({ loanAmount, emiDue, fineDue, firstEmiChargeDue, emiCollected, fineCollected, firstEmiChargeCollected });
     } finally {
       setLoading(false);
     }
@@ -1548,19 +1557,25 @@ function MetricDashboard({
 
   useEffect(() => { load(); }, [load]);
 
-  const m = metrics || { loanAmount: 0, emiDue: 0, fineDue: 0, firstEmiChargeDue: 0, emiCollected: 0, fineCollected: 0 };
+  const m = metrics || { loanAmount: 0, emiDue: 0, fineDue: 0, firstEmiChargeDue: 0, emiCollected: 0, fineCollected: 0, firstEmiChargeCollected: 0 };
   const totalLoanValue = m.loanAmount;
-  const totalCollection = m.emiCollected + m.fineCollected;
+  // Collection = everything actually received: EMI + fines + 1st EMI charges.
+  const totalCollection = m.emiCollected + m.fineCollected + m.firstEmiChargeCollected;
   const marketDue = m.emiDue + m.fineDue + m.firstEmiChargeDue;
   const btd = totalLoanValue - totalCollection;
-  const expectedRevenue = totalLoanValue + m.fineDue + m.fineCollected;
+  // Expected revenue = financed principal + every fine + every 1st EMI charge
+  // (each counted whether already collected or still due).
+  const expectedRevenue =
+    totalLoanValue +
+    m.fineDue + m.fineCollected +
+    m.firstEmiChargeDue + m.firstEmiChargeCollected;
   const invDue = expectedRevenue - totalCollection;
-  const collectionPct = totalLoanValue + m.fineDue > 0
-    ? Math.min(100, Math.round((totalCollection / (totalLoanValue + m.fineDue + m.fineCollected)) * 100))
+  const collectionPct = expectedRevenue > 0
+    ? Math.min(100, Math.round((totalCollection / expectedRevenue) * 100))
     : 0;
-  const marketTotal = m.emiCollected + m.emiDue + m.firstEmiChargeDue;
+  const marketTotal = m.emiCollected + m.emiDue + m.firstEmiChargeDue + m.firstEmiChargeCollected;
   const marketPct = marketTotal > 0
-    ? Math.min(100, Math.round((m.emiCollected / marketTotal) * 100))
+    ? Math.min(100, Math.round(((m.emiCollected + m.firstEmiChargeCollected) / marketTotal) * 100))
     : 0;
 
   return (
@@ -1572,9 +1587,25 @@ function MetricDashboard({
             Active loans + any finished loans still carrying unpaid fines
           </p>
         </div>
-        <button onClick={load} className="text-xs text-brand-600 underline underline-offset-4">
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/fines/recalc', { method: 'POST' });
+                const data = await res.json();
+                if (!res.ok) { toast.error(data.error || 'Recalc failed'); return; }
+                toast.success(`Fines updated (${data.updated ?? 0} EMIs)`);
+                await load();
+              } catch { toast.error('Recalc failed'); }
+            }}
+            className="text-xs text-amber-600 underline underline-offset-4"
+          >
+            Recalc fines
+          </button>
+          <button onClick={load} className="text-xs text-brand-600 underline underline-offset-4">
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <MetricCard
@@ -1601,7 +1632,7 @@ function MetricDashboard({
         />
         <MetricCard
           title="COLLECTION"
-          formula="EMI Collected + Fine Collected"
+          formula="EMI + Fine + 1st Charge Collected"
           value={fmt(totalCollection)}
           colorTheme="bg-teal-500/10 border-teal-500 text-teal-700"
           graphic="filled-bar"
