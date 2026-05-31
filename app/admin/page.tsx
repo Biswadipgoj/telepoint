@@ -468,7 +468,8 @@ export default function AdminDashboard() {
                 <div className="px-5 py-3 border-b border-surface-4">
                   <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found — click a row to view</span>
                 </div>
-                <table className="data-table text-xs sm:text-sm">
+                <div className="overflow-x-auto">
+                  <table className="data-table text-xs sm:text-sm min-w-[680px]">
                   <thead>
                     <tr><th>Name</th><th>IMEI</th><th>Mobile</th><th>Retailer</th><th>Status</th><th>EMI/mo</th><th /></tr>
                   </thead>
@@ -512,7 +513,8 @@ export default function AdminDashboard() {
                       );
                     })}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             )}
 

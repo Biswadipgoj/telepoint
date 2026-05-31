@@ -374,7 +374,8 @@ export default function RetailerDashboard() {
             <div className="px-5 py-3 border-b border-white/[0.05]">
               <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found</span>
             </div>
-            <table className="data-table text-xs sm:text-sm">
+            <div className="overflow-x-auto">
+            <table className="data-table text-xs sm:text-sm min-w-[560px]">
               <thead>
                 <tr><th>Name</th><th>IMEI</th><th>Mobile</th><th>Status</th><th>EMI</th><th></th></tr>
               </thead>
@@ -418,6 +419,7 @@ export default function RetailerDashboard() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
