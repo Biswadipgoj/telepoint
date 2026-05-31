@@ -27,6 +27,16 @@ function fmtDateShort(d: string) {
   });
 }
 
+function ibbDirect(url: string): string {
+  if (!url) return '';
+  if (/i\.ibb\.co|\.jpg|\.jpeg|\.png|\.webp/i.test(url)) return url;
+  if (url.includes('ibb.co/')) {
+    const id = url.split('ibb.co/')[1]?.split('/')[0];
+    if (id) return `https://i.ibb.co/${id}/img.jpg`;
+  }
+  return url;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -107,7 +117,7 @@ export async function GET(
   const totalAmount = Number(request.total_amount ?? 0);
 
   // Customer photo — handle IBB and direct URLs
-  const photoUrl = customer?.customer_photo_url ?? '';
+  const photoUrl = ibbDirect(customer?.customer_photo_url ?? '');
   const photoHtml = photoUrl
     ? `<img src="${photoUrl}" alt="Customer Photo" style="width:80px;height:80px;border-radius:12px;object-fit:cover;border:2px solid #e2e8f0;display:block;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
        <div style="display:none;width:80px;height:80px;border-radius:12px;background:#f1f5f9;border:2px solid #e2e8f0;align-items:center;justify-content:center;color:#94a3b8;font-size:0.7rem;text-align:center;">No<br>Photo</div>`

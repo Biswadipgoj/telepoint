@@ -16,6 +16,16 @@ const TOKEN_KEY = 'emi_app_token';
 
 const fmt = formatCurrency;
 
+function ibbDirect(url?: string): string {
+  if (!url) return '';
+  if (/i\.ibb\.co|\.jpg|\.jpeg|\.png|\.webp/i.test(url)) return url;
+  if (url.includes('ibb.co/')) {
+    const id = url.split('ibb.co/')[1]?.split('/')[0];
+    if (id) return `https://i.ibb.co/${id}/img.jpg`;
+  }
+  return url;
+}
+
 interface CustomerSession {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   customer: any;
@@ -578,20 +588,21 @@ export default function CustomerPortal() {
         {/* Profile card */}
         <div className="card overflow-hidden">
           <div className="flex items-start gap-4 p-5">
-            {customer?.customer_photo_url ? (
-              <img
-                src={customer.customer_photo_url}
-                alt="Photo"
-                className="w-20 h-20 rounded-2xl object-cover border border-white/10 flex-shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : (
-              <div className="w-20 h-20 rounded-2xl bg-surface-3 border border-white/10 flex items-center justify-center flex-shrink-0">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5">
+            <div className="w-20 h-20 rounded-2xl border border-white/10 flex-shrink-0 relative overflow-hidden">
+              <div className="absolute inset-0 bg-surface-3 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(148,163,184,0.6)" strokeWidth="1.5">
                   <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" />
                 </svg>
               </div>
-            )}
+              {customer?.customer_photo_url && (
+                <img
+                  src={ibbDirect(customer.customer_photo_url)}
+                  alt="Photo"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <h2 className="font-display text-2xl font-bold text-ink">{customer?.customer_name}</h2>
               {customer?.father_name && <p className="text-slate-500 text-sm">C/O {customer.father_name}</p>}
