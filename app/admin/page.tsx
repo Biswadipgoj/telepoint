@@ -466,54 +466,50 @@ export default function AdminDashboard() {
             {searchResults !== null && searchResults.length > 1 && !selectedCustomer && (
               <div className="card overflow-hidden animate-fade-in">
                 <div className="px-5 py-3 border-b border-surface-4">
-                  <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found — click a row to view</span>
+                  <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found — tap a card to view</span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="data-table text-xs sm:text-sm min-w-[680px]">
-                  <thead>
-                    <tr><th>Name</th><th>IMEI</th><th>Mobile</th><th>Retailer</th><th>Status</th><th>EMI/mo</th><th /></tr>
-                  </thead>
-                  <tbody>
-                    {searchResults.map((c) => {
-                      const rowTint =
-                        c.status === 'RUNNING'  ? 'hover:bg-emerald-50' :
-                        c.status === 'SETTLED'  ? 'hover:bg-amber-50' :
-                        c.status === 'NPA'      ? 'hover:bg-rose-50' :
-                                                   'hover:bg-sky-50';
-                      const stripe =
-                        c.status === 'RUNNING'  ? 'border-l-4 border-emerald-400' :
-                        c.status === 'SETTLED'  ? 'border-l-4 border-amber-400' :
-                        c.status === 'NPA'      ? 'border-l-4 border-rose-400' :
-                                                   'border-l-4 border-sky-400';
-                      return (
-                      <tr key={c.id} onClick={() => selectCustomerFn(c)} className={`cursor-pointer ${rowTint}`}>
-                        <td className={stripe}>
-                          <p className="text-ink font-semibold">{c.customer_name}</p>
-                          {c.father_name && <p className="text-xs text-ink-muted">C/O {c.father_name}</p>}
-                        </td>
-                        <td><span className="font-num text-xs">{c.imei}</span></td>
-                        <td><span className="font-num">{c.mobile}</span></td>
-                        <td><span className="text-ink-muted">{(c.retailer as Retailer)?.name || '—'}</span></td>
-                        <td>
-                          {c.status === 'RUNNING'
-                            ? <span className="badge bg-emerald-100 text-emerald-800 border border-emerald-300">● Running</span>
-                            : c.status === 'SETTLED'
-                            ? <span className="badge bg-amber-100 text-amber-800 border border-amber-300">⚖ Settled</span>
-                            : c.status === 'NPA'
-                            ? <span className="badge bg-rose-100 text-rose-800 border border-rose-300">⚠ NPA</span>
-                            : <span className="badge bg-sky-100 text-sky-800 border border-sky-300">✓ Complete</span>}
-                        </td>
-                        <td><span className="font-num font-bold text-brand-700">{fmt(c.emi_amount)}</span></td>
-                        <td>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-muted">
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                  </table>
+                <div className="divide-y divide-surface-3">
+                  {searchResults.map((c) => {
+                    const rowTint =
+                      c.status === 'RUNNING'  ? 'hover:bg-emerald-50' :
+                      c.status === 'SETTLED'  ? 'hover:bg-amber-50' :
+                      c.status === 'NPA'      ? 'hover:bg-rose-50' :
+                                                 'hover:bg-sky-50';
+                    const stripe =
+                      c.status === 'RUNNING'  ? 'border-emerald-400' :
+                      c.status === 'SETTLED'  ? 'border-amber-400' :
+                      c.status === 'NPA'      ? 'border-rose-400' :
+                                                 'border-sky-400';
+                    const statusBadge =
+                      c.status === 'RUNNING'
+                        ? <span className="badge bg-emerald-100 text-emerald-800 border border-emerald-300">● Running</span>
+                        : c.status === 'SETTLED'
+                        ? <span className="badge bg-amber-100 text-amber-800 border border-amber-300">⚖ Settled</span>
+                        : c.status === 'NPA'
+                        ? <span className="badge bg-rose-100 text-rose-800 border border-rose-300">⚠ NPA</span>
+                        : <span className="badge bg-sky-100 text-sky-800 border border-sky-300">✓ Complete</span>;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => selectCustomerFn(c)}
+                        className={`w-full text-left px-4 py-3.5 border-l-4 ${stripe} ${rowTint} transition-colors flex flex-col gap-2`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-ink font-semibold truncate">{c.customer_name}</p>
+                            {c.father_name && <p className="text-xs text-ink-muted truncate">C/O {c.father_name}</p>}
+                          </div>
+                          <div className="shrink-0">{statusBadge}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                          <span className="text-ink-muted">IMEI <span className="font-num text-ink">{c.imei || '—'}</span></span>
+                          <span className="text-ink-muted">Mobile <span className="font-num text-ink">{c.mobile || '—'}</span></span>
+                          <span className="text-ink-muted">Retailer <span className="text-ink">{(c.retailer as Retailer)?.name || '—'}</span></span>
+                          <span className="text-ink-muted">EMI/mo <span className="font-num font-bold text-brand-700">{fmt(c.emi_amount)}</span></span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
