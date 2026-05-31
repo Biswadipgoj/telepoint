@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import React from 'react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { format } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { notFound } from 'next/navigation';
 import PrintButton from '@/components/PrintButton';
 
@@ -55,7 +56,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
           <a
             href={`/api/receipt/${params.id}`}
             download={`receipt-${params.id.slice(0, 8)}.html`}
-            style={{ padding: '0.625rem 1.25rem', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}
+            style={{ padding: '0.625rem 1.25rem', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'in[...]
           >
             ⬇️ Download Receipt
           </a>
@@ -70,14 +71,14 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
                 ``,
                 `💰 Total Paid: ₹${request.total_amount}`,
                 `🏷️ Mode: ${request.mode}`,
-                `📅 ${format(new Date(request.created_at), 'd MMM yyyy')}`,
+                `📅 ${formatInTimeZone(new Date(request.created_at), 'Asia/Kolkata', 'd MMM yyyy')}`,
                 ``,
                 `Receipt: ${process.env.NEXT_PUBLIC_APP_URL || ''}/receipt/${params.id}`,
               ].join('\n')
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ padding: '0.625rem 1.25rem', background: '#25d366', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}
+            style={{ padding: '0.625rem 1.25rem', background: '#25d366', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'in[...]
           >
             📲 Share WhatsApp
           </a>
@@ -88,7 +89,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
 
           {/* Brand header */}
           <div style={{ background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)', padding: '1.75rem 2rem', textAlign: 'center' }}>
-            <div style={{ width: '3.5rem', height: '3.5rem', background: 'rgba(255,255,255,0.2)', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.75rem' }}>
+            <div style={{ width: '3.5rem', height: '3.5rem', background: 'rgba(255,255,255,0.2)', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto[...]
               <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
                 <path d="M16 2L2 9V23L16 30L30 23V9L16 2Z" stroke="white" strokeWidth="2.5" fill="rgba(255,255,255,0.2)" />
                 <circle cx="16" cy="14" r="4" fill="white" />
@@ -157,9 +158,9 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
                 <KV label="UPI ID" value="biswajit.khanra82@axl" mono small />
               )}
               <KV label="Collected By" value={retailer?.name ?? '—'} />
-              <KV label="Submitted On" value={format(new Date(request.created_at), 'd MMM yyyy, h:mm a')} mono small />
+              <KV label="Submitted On" value={formatInTimeZone(new Date(request.created_at), 'Asia/Kolkata', 'd MMM yyyy, h:mm a')} mono small />
               {request.approved_at && (
-                <KV label="Approved On" value={format(new Date(request.approved_at), 'd MMM yyyy, h:mm a')} mono small />
+                <KV label="Approved On" value={formatInTimeZone(new Date(request.approved_at), 'Asia/Kolkata', 'd MMM yyyy, h:mm a')} mono small />
               )}
             </Section>
 
@@ -182,7 +183,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
                 TelePoint EMI Portal · Thank you for your payment
               </p>
               <p style={{ fontSize: '0.65rem', color: '#cbd5e1', fontFamily: 'DM Mono, monospace', marginTop: '0.2rem' }}>
-                {format(new Date(request.created_at), 'd MMMM yyyy')}
+                {formatInTimeZone(new Date(request.created_at), 'Asia/Kolkata', 'd MMMM yyyy')}
               </p>
             </div>
           </div>
