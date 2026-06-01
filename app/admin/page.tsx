@@ -14,6 +14,7 @@ import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import PaymentModal from '@/components/PaymentModal';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
+import SmartAlertPopup from '@/components/SmartAlertPopup';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
@@ -589,6 +590,19 @@ export default function AdminDashboard() {
                   baseFine={fineSettings.default_fine_amount}
                   weeklyIncrement={fineSettings.weekly_fine_increment}
                 />
+
+                {/* Attention popup: EMI due within 10 days / fine / 1st charge pending */}
+                {breakdown && (
+                  <SmartAlertPopup
+                    key={selectedCustomer.id}
+                    fineDue={breakdown.fine_due || 0}
+                    daysUntilDue={breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null}
+                    nextEmiNo={breakdown.next_emi_no ?? undefined}
+                    nextEmiAmount={breakdown.next_emi_amount ?? undefined}
+                    firstChargeDue={breakdown.first_emi_charge_due || 0}
+                    dueWindowDays={10}
+                  />
+                )}
                 {breakdown && (() => {
                   const daysLeft = breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null;
                   return (

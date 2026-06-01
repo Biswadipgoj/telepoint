@@ -3,14 +3,15 @@ import { useState, useEffect } from 'react';
 
 function fmt(n: number) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n); }
 
-export default function SmartAlertPopup({ fineDue, daysUntilDue, nextEmiNo, nextEmiAmount, firstChargeDue }: {
+export default function SmartAlertPopup({ fineDue, daysUntilDue, nextEmiNo, nextEmiAmount, firstChargeDue, dueWindowDays = 5 }: {
   fineDue: number; daysUntilDue: number | null; nextEmiNo?: number; nextEmiAmount?: number; firstChargeDue: number;
+  dueWindowDays?: number;
 }) {
   const [dismissed, setDismissed] = useState(false);
   const [show, setShow] = useState(false);
 
   const alerts: { icon: string; title: string; msg: string; color: string }[] = [];
-  if (daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 5)
+  if (daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= dueWindowDays)
     alerts.push({ icon: '🔔', title: daysUntilDue === 0 ? 'EMI Due Today!' : `EMI Due in ${daysUntilDue} Days`, msg: `EMI #${nextEmiNo || '—'} — ${fmt(nextEmiAmount || 0)}`, color: '#92400e' });
   if (fineDue > 0)
     alerts.push({ icon: '⚠️', title: 'Late Fine Due', msg: `Fine of ${fmt(fineDue)} pending. Grows ₹25/week.`, color: '#dc2626' });
