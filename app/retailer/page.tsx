@@ -12,6 +12,7 @@ import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import PaymentModal from '@/components/PaymentModal';
+import SmartAlertPopup from '@/components/SmartAlertPopup';
 import toast from 'react-hot-toast';
 import { format, differenceInDays } from 'date-fns';
 import Link from 'next/link';
@@ -21,6 +22,21 @@ import BottomNav from '@/components/BottomNav';
 function fmt(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n);
 }
+
+/** A customer needing attention: EMI due soon/overdue, fine due, or 1st charge pending. */
+type ActionItem = {
+  customer_id: string;
+  customer_name: string;
+  imei: string;
+  mobile: string;
+  nextEmiNo: number | null;
+  nextDueDate: string | null;
+  daysLeft: number | null;
+  emiAmount: number;
+  fineDue: number;
+  firstChargeDue: number;
+  overdue: boolean;
+};
 
 export default function RetailerDashboard() {
   const supabaseRef2 = useRef<ReturnType<typeof createClient> | null>(null);
@@ -35,11 +51,9 @@ export default function RetailerDashboard() {
   const [myRequests, setMyRequests] = useState<PaymentRequest[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [fineSettings, setFineSettings] = useState({ default_fine_amount: 450, weekly_fine_increment: 25 });
-  const [upcomingEmis, setUpcomingEmis] = useState<{
-    id: string; emi_no: number; due_date: string; amount: number;
-    customer_name: string; imei: string; mobile: string;
-  }[] | null>(null);
-  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [actionItems, setActionItems] = useState<ActionItem[] | null>(null);
+  const [showActions, setShowActions] = useState(false);
+  const [actionsLoading, setActionsLoading] = useState(false);
 
   // Broadcast messages
   const [broadcastPopups, setBroadcastPopups] = useState<{ id: string; message: string; image_url?: string | null; expires_at: string; sender_name?: string; sender_role?: string }[]>([]);
@@ -84,53 +98,96 @@ export default function RetailerDashboard() {
     }
   }
 
-  async function loadUpcomingEmis(retailerId: string) {
+  // Build the "needs attention" list: RUNNING customers with an EMI due within
+  // the next 10 days (or overdue), an outstanding fine, or a pending 1st EMI
+  // charge — so the retailer can track and tap straight into each one.
+  async function loadActionItems(retailerId: string) {
     const sb = supabaseRef.current;
-    const today = new Date().toISOString().split('T')[0];
-    const in5 = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    setActionsLoading(true);
+    setShowActions(true);
+    try {
+      const { data: custData } = await sb
+        .from('customers')
+        .select('id, customer_name, imei, mobile, first_emi_charge_amount, first_emi_charge_paid_at')
+        .eq('retailer_id', retailerId)
+        .eq('status', 'RUNNING');
 
-    // Fetch this retailer's RUNNING customers first (DB-level filter, no data leakage)
-    const { data: custData } = await sb
-      .from('customers')
-      .select('id, customer_name, imei, mobile')
-      .eq('retailer_id', retailerId)
-      .eq('status', 'RUNNING');
+      const customers = (custData as Array<{
+        id: string; customer_name: string; imei: string; mobile: string;
+        first_emi_charge_amount?: number; first_emi_charge_paid_at?: string | null;
+      }>) || [];
 
-    if (!custData || custData.length === 0) {
-      setUpcomingEmis([]);
-      setShowUpcoming(true);
-      return;
+      if (!customers.length) { setActionItems([]); return; }
+
+      const custIds = customers.map(c => c.id);
+      const { data: emiData } = await sb
+        .from('emi_schedule')
+        .select('id, customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
+        .in('customer_id', custIds);
+
+      const emiList = (emiData as EMISchedule[]) || [];
+      const byCustomer = new Map<string, EMISchedule[]>();
+      for (const e of emiList) {
+        const arr = byCustomer.get(e.customer_id) || [];
+        arr.push(e);
+        byCustomer.set(e.customer_id, arr);
+      }
+
+      const todayMs = Date.now();
+      const items: ActionItem[] = [];
+
+      for (const c of customers) {
+        const cEmis = (byCustomer.get(c.id) || []).sort((a, b) => a.emi_no - b.emi_no);
+        const fineDue = calculateTotalFineFromEmis(cEmis, fineSettings.default_fine_amount, fineSettings.weekly_fine_increment);
+        const chargeAmt = Number(c.first_emi_charge_amount || 0);
+        const firstChargeDue = chargeAmt > 0 && !c.first_emi_charge_paid_at ? chargeAmt : 0;
+
+        const nextEmi = cEmis.find(e => e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID');
+        const daysLeft = nextEmi ? differenceInDays(new Date(nextEmi.due_date), new Date()) : null;
+        const overdue = cEmis.some(e =>
+          (e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID') && new Date(e.due_date).getTime() < todayMs);
+
+        const dueSoon = daysLeft !== null && daysLeft <= 10;
+        if (!dueSoon && !overdue && fineDue <= 0 && firstChargeDue <= 0) continue;
+
+        items.push({
+          customer_id: c.id,
+          customer_name: c.customer_name,
+          imei: c.imei,
+          mobile: c.mobile,
+          nextEmiNo: nextEmi?.emi_no ?? null,
+          nextDueDate: nextEmi?.due_date ?? null,
+          daysLeft,
+          emiAmount: nextEmi ? Math.max(0, Number(nextEmi.amount || 0) - Number(nextEmi.partial_paid_amount || 0)) : 0,
+          fineDue,
+          firstChargeDue,
+          overdue,
+        });
+      }
+
+      // Most urgent first: overdue, then soonest due, then biggest fine.
+      items.sort((a, b) => {
+        if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+        const da = a.daysLeft ?? 9999, db = b.daysLeft ?? 9999;
+        if (da !== db) return da - db;
+        return b.fineDue - a.fineDue;
+      });
+
+      setActionItems(items);
+    } finally {
+      setActionsLoading(false);
     }
+  }
 
-    type CustInfo = { id: string; customer_name: string; imei: string; mobile: string };
-    const custIds = (custData as CustInfo[]).map(c => c.id);
-    const custMap = new Map<string, CustInfo>((custData as CustInfo[]).map(c => [c.id, c]));
-
-    const { data } = await sb
-      .from('emi_schedule')
-      .select('id, emi_no, due_date, amount, customer_id')
-      .in('customer_id', custIds)
-      .in('status', ['UNPAID', 'PARTIALLY_PAID'])
-      .gte('due_date', today)
-      .lte('due_date', in5)
-      .order('due_date');
-
-    type EmiInfo = { id: string; emi_no: number; due_date: string; amount: number; customer_id: string };
-    const result = ((data || []) as EmiInfo[]).map(row => {
-      const cust = custMap.get(row.customer_id);
-      return {
-        id: row.id,
-        emi_no: row.emi_no,
-        due_date: row.due_date,
-        amount: row.amount,
-        customer_name: cust?.customer_name || '',
-        imei: cust?.imei || '',
-        mobile: cust?.mobile || '',
-      };
-    });
-
-    setUpcomingEmis(result);
-    setShowUpcoming(true);
+  // Open a customer straight from the action list (fetch the full row, then show).
+  async function openCustomerById(id: string) {
+    const sb = supabaseRef.current;
+    const { data } = await sb.from('customers').select('*, retailer:retailers(*)').eq('id', id).single();
+    if (!data) { toast.error('Could not open customer'); return; }
+    setSearchResults(null);
+    setShowActions(false);
+    await selectCustomer(data as Customer);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function loadMyRequests(retailerId: string) {
@@ -231,6 +288,7 @@ export default function RetailerDashboard() {
               retailerName={retailer.name}
               baseFine={fineSettings.default_fine_amount}
               weeklyIncrement={fineSettings.weekly_fine_increment}
+              hideLoanAmount
             />
           </div>
         )}
@@ -254,50 +312,66 @@ export default function RetailerDashboard() {
           </div>
         ))}
 
-        {/* Upcoming EMI panel */}
+        {/* Needs-attention panel — EMIs due (10 days) / overdue / fines / 1st charge */}
         <div className="mb-4 flex flex-wrap gap-2 items-center">
           <button
-            onClick={() => retailer && loadUpcomingEmis(retailer.id)}
+            onClick={() => retailer && loadActionItems(retailer.id)}
             className="btn-secondary text-sm"
           >
-            🔔 Show Upcoming EMIs (Next 5 Days)
+            🔔 Track EMIs Due &amp; Fines Pending
           </button>
         </div>
 
-        {showUpcoming && upcomingEmis !== null && (
+        {showActions && actionItems !== null && (
           <div className="card overflow-hidden mb-6 animate-fade-in">
-            <div className="px-5 py-3 border-b border-white/[0.05] flex items-center justify-between">
-              <span className="text-sm font-semibold text-ink">Upcoming EMIs — Next 5 Days</span>
-              <button onClick={() => setShowUpcoming(false)} className="text-xs text-ink-muted hover:text-ink">Hide</button>
+            <div className="px-5 py-3 border-b border-surface-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-ink">
+                Needs Attention{actionsLoading ? '' : ` · ${actionItems.length}`}
+              </span>
+              <button onClick={() => setShowActions(false)} className="text-xs text-ink-muted hover:text-ink">Hide</button>
             </div>
-            {upcomingEmis.length === 0 ? (
-              <div className="px-5 py-6 text-ink-muted text-sm text-center">No EMIs due in the next 5 days 🎉</div>
+            {actionsLoading ? (
+              <div className="px-5 py-6 text-ink-muted text-sm text-center">Loading…</div>
+            ) : actionItems.length === 0 ? (
+              <div className="px-5 py-6 text-ink-muted text-sm text-center">Nothing due in the next 10 days, no fines pending 🎉</div>
             ) : (
-              <table className="data-table text-xs sm:text-sm">
-                <thead>
-                  <tr><th>Customer</th><th>EMI #</th><th>Due Date</th><th>Amount</th><th>Mobile</th></tr>
-                </thead>
-                <tbody>
-                  {upcomingEmis.map(e => {
-                    const daysLeft = Math.ceil((new Date(e.due_date).getTime() - Date.now()) / 86400000);
-                    return (
-                      <tr key={e.id}>
-                        <td>
-                          <p className="text-ink font-medium">{e.customer_name}</p>
-                          <p className="text-xs font-num text-ink-muted">{e.imei}</p>
-                        </td>
-                        <td><span className="font-num">#{e.emi_no}</span></td>
-                        <td>
-                          <p className="text-xs font-num font-semibold text-warning">{format(new Date(e.due_date), 'd MMM yyyy')}</p>
-                          <p className="text-xs text-ink-muted">{daysLeft === 0 ? 'Today' : `${daysLeft}d left`}</p>
-                        </td>
-                        <td><span className="font-num text-brand-600">{fmt(e.amount)}</span></td>
-                        <td><span className="font-num text-ink-muted">{e.mobile}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="divide-y divide-surface-3">
+                {actionItems.map(it => {
+                  const dueLabel = it.daysLeft === null ? null
+                    : it.daysLeft < 0 ? `Overdue ${Math.abs(it.daysLeft)}d`
+                    : it.daysLeft === 0 ? 'Due today'
+                    : `Due in ${it.daysLeft}d`;
+                  return (
+                    <button
+                      key={it.customer_id}
+                      onClick={() => openCustomerById(it.customer_id)}
+                      className="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-ink font-semibold truncate">{it.customer_name}</p>
+                        <p className="text-xs font-num text-ink-muted truncate">{it.imei} · {it.mobile}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {it.overdue
+                            ? <span className="badge bg-rose-100 text-rose-800 border border-rose-300 text-[10px]">⚠ {dueLabel || 'Overdue'}</span>
+                            : dueLabel && <span className="badge bg-amber-100 text-amber-800 border border-amber-300 text-[10px]">🔔 {dueLabel}</span>}
+                          {it.fineDue > 0 && <span className="badge bg-rose-100 text-rose-800 border border-rose-300 text-[10px]">Fine {fmt(it.fineDue)}</span>}
+                          {it.firstChargeDue > 0 && <span className="badge bg-amber-100 text-amber-800 border border-amber-300 text-[10px]">1st charge {fmt(it.firstChargeDue)}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {it.nextEmiNo !== null && (
+                          <>
+                            <p className="text-[10px] text-ink-muted uppercase">EMI #{it.nextEmiNo}</p>
+                            <p className="num font-bold text-brand-700">{fmt(it.emiAmount)}</p>
+                          </>
+                        )}
+                        {it.nextDueDate && <p className="text-[10px] text-ink-muted">{format(new Date(it.nextDueDate), 'd MMM')}</p>}
+                        <span className="text-[10px] text-info">Open →</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
@@ -441,7 +515,21 @@ export default function RetailerDashboard() {
               breakdown={breakdown}
               baseFine={fineSettings.default_fine_amount}
               weeklyIncrement={fineSettings.weekly_fine_increment}
+              hideLoanAmount
             />
+
+            {/* Attention popup: EMI due within 10 days / fine / 1st charge pending */}
+            {breakdown && (
+              <SmartAlertPopup
+                key={selectedCustomer.id}
+                fineDue={breakdown.fine_due || 0}
+                daysUntilDue={breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null}
+                nextEmiNo={breakdown.next_emi_no ?? undefined}
+                nextEmiAmount={breakdown.next_emi_amount ?? undefined}
+                firstChargeDue={breakdown.first_emi_charge_due || 0}
+                dueWindowDays={10}
+              />
+            )}
 
             {breakdown && (() => {
               const daysLeft = breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null;
