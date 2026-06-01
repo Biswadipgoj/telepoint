@@ -89,10 +89,10 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
       <div className="flex items-start gap-4 p-5 border-b border-surface-4">
         {/* Photo */}
         <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden">
-          <div className="absolute inset-0 bg-surface-3 flex items-center justify-center">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
-            </svg>
+          <div className="absolute inset-0 bg-amber-50 flex items-center justify-center">
+            <span className="text-3xl font-bold text-amber-400 font-display select-none leading-none">
+              {customer.customer_name?.[0]?.toUpperCase() ?? '?'}
+            </span>
           </div>
           {customer.customer_photo_url && (
             <img
