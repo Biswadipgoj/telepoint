@@ -588,11 +588,11 @@ export default function CustomerPortal() {
         {/* Profile card */}
         <div className="card overflow-hidden">
           <div className="flex items-start gap-4 p-5">
-            <div className="w-20 h-20 rounded-2xl border border-white/10 flex-shrink-0 relative overflow-hidden">
-              <div className="absolute inset-0 bg-surface-3 flex items-center justify-center">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(148,163,184,0.6)" strokeWidth="1.5">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" />
-                </svg>
+            <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden">
+              <div className="absolute inset-0 bg-amber-50 flex items-center justify-center">
+                <span className="text-3xl font-bold text-amber-400 font-display select-none leading-none">
+                  {customer?.customer_name?.[0]?.toUpperCase() ?? '?'}
+                </span>
               </div>
               {customer?.customer_photo_url && (
                 <img
@@ -629,7 +629,7 @@ export default function CustomerPortal() {
           <div className="px-5 py-3 border-b border-surface-4 flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">My EMI Plan</span>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-jade-400 font-semibold">{paidEmis.length} paid</span>
+              <span className={`font-semibold ${paidEmis.length > 0 ? 'text-jade-400' : 'text-slate-400'}`}>{paidEmis.length} paid</span>
               <span className="text-slate-600">/</span>
               <span className="text-slate-400">{sortedEmis.length} total</span>
             </div>
