@@ -56,5 +56,10 @@ module.exports = {
       },
     },
   },
+  safelist: [
+    'bg-emerald-600', 'bg-amber-500', 'bg-rose-600', 'bg-slate-500',
+    'border-emerald-400', 'border-amber-400', 'border-rose-400', 'border-slate-300',
+    'rounded-2xl', 'overflow-hidden',
+  ],
   plugins: [],
 };

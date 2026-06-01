@@ -585,27 +585,27 @@ export default function EMIScheduleTable({
           const emiPaid    = Math.max(0, Number(emi.partial_paid_amount || 0));
           const emiRemaining = Math.max(0, emiAmount - emiPaid);
 
+          const statusColor =
+            emi.status === 'APPROVED'       ? { border: '#22c55e', header: '#16a34a' } :
+            emi.status === 'PARTIALLY_PAID' ? { border: '#f59e0b', header: '#d97706' } :
+            isOverdue                       ? { border: '#f87171', header: '#dc2626' } :
+            isNext                          ? { border: '#ca8a04', header: '#a16207' } :
+                                              { border: '#cbd5e1', header: '#64748b' };
+
           return (
-            /* Outer box — border color is a direct Tailwind literal per status */
             <div
               key={emi.id}
-              style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.10)' }}
-              className={
-                emi.status === 'APPROVED'        ? 'rounded-2xl border-2 border-emerald-400 overflow-hidden' :
-                emi.status === 'PARTIALLY_PAID'  ? 'rounded-2xl border-2 border-amber-400 overflow-hidden'   :
-                isOverdue                        ? 'rounded-2xl border-2 border-rose-400 overflow-hidden'    :
-                isNext                           ? 'rounded-2xl border-2 border-brand-400 overflow-hidden'   :
-                                                   'rounded-2xl border-2 border-slate-300 overflow-hidden'
-              }
+              className="rounded-2xl overflow-hidden"
+              style={{
+                border: `2px solid ${statusColor.border}`,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+              }}
             >
-              {/* Colored header — full solid background per status */}
-              <div className={
-                emi.status === 'APPROVED'        ? 'bg-emerald-600 px-4 py-3 flex items-center justify-between gap-2' :
-                emi.status === 'PARTIALLY_PAID'  ? 'bg-amber-500 px-4 py-3 flex items-center justify-between gap-2'   :
-                isOverdue                        ? 'bg-rose-600 px-4 py-3 flex items-center justify-between gap-2'    :
-                isNext                           ? 'bg-brand-600 px-4 py-3 flex items-center justify-between gap-2'   :
-                                                   'bg-slate-500 px-4 py-3 flex items-center justify-between gap-2'
-              }>
+              {/* Solid colored header bar — inline style so it cannot be purged */}
+              <div
+                className="px-4 py-3 flex items-center justify-between gap-2"
+                style={{ backgroundColor: statusColor.header }}
+              >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-white">EMI #{emi.emi_no}</span>
                   {isNext && <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold">NEXT</span>}
