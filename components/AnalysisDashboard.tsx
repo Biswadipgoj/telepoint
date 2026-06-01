@@ -99,9 +99,9 @@ export default function AnalysisDashboard({
       // 2) Fallback: aggregate the raw tables in the browser.
       const [{ data: customers }, { data: emis }, { data: payments }, { data: retailers }] =
         await Promise.all([
-          supabase.from('customers').select('id, retailer_id, purchase_value, down_payment, disburse_amount, purchase_date, created_at'),
-          supabase.from('emi_schedule').select('due_date, status'),
-          supabase.from('payment_requests').select('retailer_id, total_amount, status, approved_at'),
+          supabase.from('customers').select('id, retailer_id, status, purchase_value, down_payment, disburse_amount, purchase_date, created_at'),
+          supabase.from('emi_schedule').select('customer_id, due_date, status'),
+          supabase.from('payment_requests').select('customer_id, retailer_id, total_amount, status, approved_at'),
           supabase.from('retailers').select('id, name'),
         ]);
 
@@ -110,26 +110,36 @@ export default function AnalysisDashboard({
       );
 
       type CustomerRow = {
-        retailer_id?: string; purchase_date?: string; created_at?: string;
+        id?: string; retailer_id?: string; status?: string;
+        purchase_date?: string; created_at?: string;
         purchase_value?: number; down_payment?: number; disburse_amount?: number;
       };
+
+      // Count both active (RUNNING) and finished (COMPLETE) loans; exclude
+      // SETTLED early-closures and NPA write-offs from the business figures.
+      const COUNTED = new Set(['RUNNING', 'COMPLETE']);
+      const countedCustomerIds = new Set<string>(
+        ((customers || []) as CustomerRow[])
+          .filter((c) => c.id && COUNTED.has(c.status || ''))
+          .map((c) => c.id as string),
+      );
 
       const period = (y: number): PeriodMetrics => {
         const p: PeriodMetrics = { ...EMPTY_PERIOD };
         for (const c of (customers || []) as CustomerRow[]) {
-          if (inMonth(c.purchase_date || c.created_at, y, month)) {
+          if (COUNTED.has(c.status || '') && inMonth(c.purchase_date || c.created_at, y, month)) {
             p.loanGiven += loanOf(c);
             p.customers += 1;
           }
         }
-        for (const e of (emis || []) as Array<{ due_date?: string; status?: string }>) {
-          if (inMonth(e.due_date, y, month)) {
+        for (const e of (emis || []) as Array<{ customer_id?: string; due_date?: string; status?: string }>) {
+          if (e.customer_id && countedCustomerIds.has(e.customer_id) && inMonth(e.due_date, y, month)) {
             p.dueEmis += 1;
             if (e.status !== 'APPROVED') p.bouncedEmis += 1;
           }
         }
-        for (const pay of (payments || []) as Array<{ status?: string; approved_at?: string; total_amount?: number }>) {
-          if (pay.status === 'APPROVED' && inMonth(pay.approved_at, y, month)) {
+        for (const pay of (payments || []) as Array<{ customer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
+          if (pay.customer_id && countedCustomerIds.has(pay.customer_id) && pay.status === 'APPROVED' && inMonth(pay.approved_at, y, month)) {
             p.collected += Number(pay.total_amount || 0);
           }
         }
@@ -139,13 +149,13 @@ export default function AnalysisDashboard({
       // Leaderboards reflect the selected month of the CURRENT year.
       const leadMap = new Map<string, number>();
       for (const c of (customers || []) as CustomerRow[]) {
-        if (c.retailer_id && inMonth(c.purchase_date || c.created_at, year, month)) {
+        if (c.retailer_id && COUNTED.has(c.status || '') && inMonth(c.purchase_date || c.created_at, year, month)) {
           leadMap.set(c.retailer_id, (leadMap.get(c.retailer_id) || 0) + 1);
         }
       }
       const collMap = new Map<string, number>();
-      for (const pay of (payments || []) as Array<{ retailer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
-        if (pay.retailer_id && pay.status === 'APPROVED' && inMonth(pay.approved_at, year, month)) {
+      for (const pay of (payments || []) as Array<{ customer_id?: string; retailer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
+        if (pay.retailer_id && pay.customer_id && countedCustomerIds.has(pay.customer_id) && pay.status === 'APPROVED' && inMonth(pay.approved_at, year, month)) {
           collMap.set(pay.retailer_id, (collMap.get(pay.retailer_id) || 0) + Number(pay.total_amount || 0));
         }
       }
