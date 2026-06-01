@@ -13,13 +13,14 @@ import CustomerFormModal from '@/components/CustomerFormModal';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import PaymentModal from '@/components/PaymentModal';
+import AnalysisDashboard from '@/components/AnalysisDashboard';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
 import { addDays, subMonths, format, differenceInDays } from 'date-fns';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
 
-type Tab = 'search' | 'retailers' | 'reports' | 'broadcast';
+type Tab = 'search' | 'retailers' | 'reports' | 'analysis' | 'broadcast';
 
 interface FilteredEMI {
   id: string;
@@ -423,6 +424,7 @@ export default function AdminDashboard() {
             { key: 'search', label: '🔍 Search' },
             { key: 'retailers', label: '🏪 Shops' },
             { key: 'reports', label: '📊 Reports' },
+            { key: 'analysis', label: '📈 Analysis' },
             { key: 'broadcast', label: '📢 Alerts' },
           ] as const).map((t) => (
             <button
@@ -1114,6 +1116,12 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* ===== ANALYSIS TAB ===== */}
+        {tab === 'analysis' && (
+          <AnalysisDashboard supabase={supabase} />
+        )}
+
         {/* ===== BROADCAST TAB ===== */}
         {tab === 'broadcast' && (
           <div className="space-y-6 animate-fade-in">
