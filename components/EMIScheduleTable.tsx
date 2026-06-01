@@ -303,9 +303,15 @@ export default function EMIScheduleTable({
                 isOverdue                        ? 'bg-rose-50/60'     :
                 isNext                           ? 'bg-brand-50/60'    : '';
 
+              const rowAccent =
+                emi.status === 'APPROVED'        ? 'border-l-4 border-l-emerald-500' :
+                emi.status === 'PARTIALLY_PAID'  ? 'border-l-4 border-l-amber-500'   :
+                isOverdue                        ? 'border-l-4 border-l-rose-500'    :
+                isNext                           ? 'border-l-4 border-l-brand-500'   : 'border-l-4 border-l-slate-200';
+
               return (
-                <tr key={emi.id} className={rowBg}>
-                  <td className="font-semibold text-ink">
+                <tr key={emi.id} className={`${rowBg} border-b-2 border-b-slate-100`}>
+                  <td className={`font-semibold text-ink ${rowAccent}`}>
                     #{emi.emi_no}
                     {isNext && (
                       <span className="ml-1 text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.5 rounded-full">NEXT</span>
@@ -561,7 +567,7 @@ export default function EMIScheduleTable({
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden divide-y divide-surface-3">
+      <div className="md:hidden flex flex-col gap-3 p-3">
         {sortedEmis.map(emi => {
           const today      = new Date();
           const dueDate    = new Date(emi.due_date);
@@ -579,88 +585,104 @@ export default function EMIScheduleTable({
           const emiPaid    = Math.max(0, Number(emi.partial_paid_amount || 0));
           const emiRemaining = Math.max(0, emiAmount - emiPaid);
 
-          const cardTint =
-            emi.status === 'APPROVED'        ? 'bg-emerald-50 border-l-4 border-emerald-500' :
-            emi.status === 'PARTIALLY_PAID'  ? 'bg-amber-50 border-l-4 border-amber-500'     :
-            isOverdue                        ? 'bg-rose-50 border-l-4 border-rose-500'        :
-            isNext                           ? 'bg-brand-50 border-l-4 border-brand-500'      :
-                                               'bg-white border-l-4 border-slate-200';
+          const headerBg =
+            emi.status === 'APPROVED'       ? 'bg-emerald-600'  :
+            emi.status === 'PARTIALLY_PAID' ? 'bg-amber-500'    :
+            isOverdue                       ? 'bg-rose-600'     :
+            isNext                          ? 'bg-brand-600'    : 'bg-slate-500';
+
+          const cardBorder =
+            emi.status === 'APPROVED'       ? 'border-emerald-300' :
+            emi.status === 'PARTIALLY_PAID' ? 'border-amber-300'   :
+            isOverdue                       ? 'border-rose-300'    :
+            isNext                          ? 'border-brand-300'   : 'border-slate-300';
 
           return (
-            <div key={emi.id} className={`p-4 space-y-2 ${cardTint}`}>
-              <div className="flex items-center justify-between gap-2">
+            <div key={emi.id} className={`rounded-xl border-2 ${cardBorder} shadow-sm overflow-hidden`}>
+              {/* Card header — colored strip with EMI # and status */}
+              <div className={`${headerBg} px-4 py-2.5 flex items-center justify-between gap-2`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-ink">EMI #{emi.emi_no}</p>
-                  {isNext && <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-full">NEXT</span>}
-                  {isLastEmi && <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded-full">LAST</span>}
+                  <p className="font-bold text-white text-sm">EMI #{emi.emi_no}</p>
+                  {isNext && (
+                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">
+                      NEXT
+                    </span>
+                  )}
+                  {isLastEmi && (
+                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">
+                      LAST
+                    </span>
+                  )}
                 </div>
                 <StatusBadge emi={emi} isOverdue={isOverdue} />
               </div>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                <p className="text-ink-muted">Due Date</p>
-                <p className={`text-right num font-semibold ${isOverdue ? 'text-rose-700' : 'text-ink'}`}>
-                  {format(dueDate, 'd MMM yyyy')}
-                </p>
-                <p className="text-ink-muted">EMI Amount</p>
-                <p className="text-right num font-semibold">{fmt(emiAmount)}</p>
+              {/* Card body */}
+              <div className="bg-white p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <p className="text-ink-muted">Due Date</p>
+                  <p className={`text-right num font-semibold ${isOverdue ? 'text-rose-700' : 'text-ink'}`}>
+                    {format(dueDate, 'd MMM yyyy')}
+                  </p>
+                  <p className="text-ink-muted">EMI Amount</p>
+                  <p className="text-right num font-semibold">{fmt(emiAmount)}</p>
 
-                {emi.status === 'PARTIALLY_PAID' && (
-                  <>
-                    <p className="text-ink-muted">EMI Paid</p>
-                    <p className="text-right num font-bold text-emerald-700">{fmt(emiPaid)}</p>
-                    <p className="text-ink-muted">Outstanding</p>
-                    <p className="text-right num font-bold text-amber-700">{fmt(emiRemaining)}</p>
-                  </>
-                )}
+                  {emi.status === 'PARTIALLY_PAID' && (
+                    <>
+                      <p className="text-ink-muted">EMI Paid</p>
+                      <p className="text-right num font-bold text-emerald-700">{fmt(emiPaid)}</p>
+                      <p className="text-ink-muted">Outstanding</p>
+                      <p className="text-right num font-bold text-amber-700">{fmt(emiRemaining)}</p>
+                    </>
+                  )}
 
-                <p className="text-ink-muted">Fine Due</p>
-                <p className={`text-right num font-bold ${fineOutstanding > 0 ? 'text-rose-700' : 'text-ink-muted'}`}>
-                  {fineOutstanding > 0 ? fmt(fineOutstanding) : '—'}
-                </p>
+                  <p className="text-ink-muted">Fine Due</p>
+                  <p className={`text-right num font-bold ${fineOutstanding > 0 ? 'text-rose-700' : 'text-ink-muted'}`}>
+                    {fineOutstanding > 0 ? fmt(fineOutstanding) : '—'}
+                  </p>
 
-                {finePaid > 0 && (
-                  <>
-                    <p className="text-ink-muted">Fine Paid</p>
-                    <p className="text-right num font-bold text-emerald-700">{fmt(finePaid)}</p>
-                  </>
-                )}
+                  {finePaid > 0 && (
+                    <>
+                      <p className="text-ink-muted">Fine Paid</p>
+                      <p className="text-right num font-bold text-emerald-700">{fmt(finePaid)}</p>
+                    </>
+                  )}
 
-                {(emi.paid_at || emi.partial_paid_at) && (
-                  <>
-                    <p className="text-ink-muted">Paid On</p>
-                    <p className="text-right num text-[11px] text-emerald-800 font-semibold">
-                      {fmtDateTime(emi.paid_at || emi.partial_paid_at)}
-                    </p>
-                  </>
-                )}
+                  {(emi.paid_at || emi.partial_paid_at) && (
+                    <>
+                      <p className="text-ink-muted">Paid On</p>
+                      <p className="text-right num text-[11px] text-emerald-800 font-semibold">
+                        {fmtDateTime(emi.paid_at || emi.partial_paid_at)}
+                      </p>
+                    </>
+                  )}
 
-                {emi.fine_paid_at && finePaid > 0 && (
-                  <>
-                    <p className="text-ink-muted">Fine Paid On</p>
-                    <p className="text-right num text-[11px] text-rose-700 font-semibold">
-                      {fmtDateTime(emi.fine_paid_at)}
-                    </p>
-                  </>
-                )}
+                  {emi.fine_paid_at && finePaid > 0 && (
+                    <>
+                      <p className="text-ink-muted">Fine Paid On</p>
+                      <p className="text-right num text-[11px] text-rose-700 font-semibold">
+                        {fmtDateTime(emi.fine_paid_at)}
+                      </p>
+                    </>
+                  )}
 
-                {emi.utr && (
-                  <>
-                    <p className="text-ink-muted">UTR</p>
-                    <p className="text-right font-mono text-[10px]">{emi.utr}</p>
-                  </>
-                )}
-              </div>
-
-              {/* Admin edit entry — all status changes live INSIDE the edit panel */}
-              {isAdmin && editingId !== emi.id && (
-                <div className="flex gap-1.5 flex-wrap pt-1">
-                  <button onClick={() => beginEdit(emi)}
-                    className="text-[11px] px-2 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200 transition">
-                    ✏ Edit
-                  </button>
+                  {emi.utr && (
+                    <>
+                      <p className="text-ink-muted">UTR</p>
+                      <p className="text-right font-mono text-[10px]">{emi.utr}</p>
+                    </>
+                  )}
                 </div>
-              )}
+
+                {/* Admin edit entry */}
+                {isAdmin && editingId !== emi.id && (
+                  <div className="flex gap-1.5 flex-wrap pt-2 border-t border-surface-3">
+                    <button onClick={() => beginEdit(emi)}
+                      className="text-[11px] px-2 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200 transition">
+                      ✏ Edit
+                    </button>
+                  </div>
+                )}
 
               {/* Inline mobile edit form — Super Admin override panel */}
               {isAdmin && editingId === emi.id && (
@@ -785,6 +807,7 @@ export default function EMIScheduleTable({
                   </div>
                 </div>
               )}
+              </div>
             </div>
           );
         })}
