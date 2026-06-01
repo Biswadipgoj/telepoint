@@ -17,7 +17,18 @@ interface Props {
   weeklyIncrement?: number;
 }
 
-const fmt = formatCurrency;
+// Render currency — ensures ₹0 displays cleanly (not as a struck-through 0)
+function fmt(value: unknown): string {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num) || num === 0) return '\u20B90'; // ₹0 via unicode to avoid font glyph issues
+  const formatted = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(num).replace(/\s+/g, '');
+  return formatted && formatted.length > 0 ? formatted : '\u20B90';
+}
 
 // Human-friendly date/time for paid timestamps
 function fmtDateTime(iso?: string | null): string {
@@ -250,6 +261,8 @@ export default function EMIScheduleTable({
     }
   }
 
+  const totalEmis = sortedEmis.length;
+
   return (
     <div className="card overflow-hidden">
       {/* Header */}
@@ -310,15 +323,20 @@ export default function EMIScheduleTable({
                 isNext                           ? 'border-l-4 border-l-brand-500'   : 'border-l-4 border-l-slate-200';
 
               return (
-                <tr key={emi.id} className={rowBg} style={{ borderBottom: '2px solid #f1f5f9' }}>
+                <tr key={emi.id} className={rowBg} style={{ borderBottom: '3px solid #e2e8f0' }}>
                   <td className={`font-semibold text-ink ${rowAccent}`}>
-                    #{emi.emi_no}
-                    {isNext && (
-                      <span className="ml-1 text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.5 rounded-full">NEXT</span>
-                    )}
-                    {isLastEmi && (
-                      <span className="ml-1 text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.5 rounded-full">LAST</span>
-                    )}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-bold">EMI {emi.emi_no}</span>
+                      <span className="text-[9px] text-ink-muted font-normal">of {totalEmis}</span>
+                    </div>
+                    <div className="flex gap-1 mt-0.5">
+                      {isNext && (
+                        <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.5 rounded-full">NEXT</span>
+                      )}
+                      {isLastEmi && (
+                        <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.5 rounded-full">LAST</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Due Date */}
@@ -567,8 +585,8 @@ export default function EMIScheduleTable({
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden flex flex-col gap-4 p-3">
-        {sortedEmis.map(emi => {
+      <div className="md:hidden flex flex-col gap-0 divide-y divide-slate-200">
+        {sortedEmis.map((emi) => {
           const today      = new Date();
           const dueDate    = new Date(emi.due_date);
           const isOverdue  = ['UNPAID', 'PARTIALLY_PAID'].includes(emi.status) && dueDate < today;
@@ -586,19 +604,19 @@ export default function EMIScheduleTable({
           const emiRemaining = Math.max(0, emiAmount - emiPaid);
 
           const statusColor =
-            emi.status === 'APPROVED'       ? { border: '#22c55e', header: '#16a34a' } :
-            emi.status === 'PARTIALLY_PAID' ? { border: '#f59e0b', header: '#d97706' } :
-            isOverdue                       ? { border: '#f87171', header: '#dc2626' } :
-            isNext                          ? { border: '#ca8a04', header: '#a16207' } :
-                                              { border: '#cbd5e1', header: '#64748b' };
+            emi.status === 'APPROVED'       ? { border: '#22c55e', header: '#16a34a', light: '#f0fdf4' } :
+            emi.status === 'PARTIALLY_PAID' ? { border: '#f59e0b', header: '#d97706', light: '#fffbeb' } :
+            isOverdue                       ? { border: '#f87171', header: '#dc2626', light: '#fff1f2' } :
+            isNext                          ? { border: '#ca8a04', header: '#a16207', light: '#fefce8' } :
+                                              { border: '#94a3b8', header: '#64748b', light: '#f8fafc' };
 
           return (
             <div
               key={emi.id}
-              className="rounded-2xl overflow-hidden"
+              className="mx-3 my-3 rounded-2xl overflow-hidden"
               style={{
-                border: `2px solid ${statusColor.border}`,
-                boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+                border: `2.5px solid ${statusColor.border}`,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
               }}
             >
               {/* Solid colored header bar — inline style so it cannot be purged */}
@@ -607,7 +625,10 @@ export default function EMIScheduleTable({
                 style={{ backgroundColor: statusColor.header }}
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-white">EMI #{emi.emi_no}</span>
+                  <div className="flex flex-col">
+                    <span className="font-extrabold text-white text-base leading-tight">EMI {emi.emi_no}</span>
+                    <span className="text-[10px] text-white/70 font-medium">of {totalEmis} installments</span>
+                  </div>
                   {isNext && <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold">NEXT</span>}
                   {isLastEmi && <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold">LAST</span>}
                 </div>
@@ -619,7 +640,7 @@ export default function EMIScheduleTable({
                 </span>
               </div>
 
-              {/* White card body */}
+              {/* Card body */}
               <div className="bg-white px-4 py-3 space-y-3">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   <p className="text-ink-muted">Due Date</p>
