@@ -11,8 +11,6 @@ interface Props {
   breakdown?: DueBreakdown | null;
   baseFine?: number;
   weeklyIncrement?: number;
-  /** Hide the "Loan Amount" tile — retailers don't see principal, only admins do. */
-  hideLoanAmount?: boolean;
 }
 
 const fmt = formatCurrency;
@@ -20,7 +18,6 @@ const fmt = formatCurrency;
 export default function CustomerPaymentSummary({
   customer, emis, breakdown,
   baseFine = 450, weeklyIncrement = 25,
-  hideLoanAmount = false,
 }: Props) {
   // ── Core derivations ─────────────────────────────────────────────────────
   const purchaseValue = Number(customer.purchase_value || 0);
@@ -90,14 +87,12 @@ export default function CustomerPaymentSummary({
       </div>
 
       {/* Loan & Aggregates row */}
-      <div className={`grid grid-cols-2 ${hideLoanAmount ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-px bg-surface-4`}>
-        {!hideLoanAmount && (
-          <Tile
-            tint="violet" emoji="💰" label="Loan Amount"
-            value={fmt(loanAmount)}
-            sub="Principal borrowed"
-          />
-        )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-4">
+        <Tile
+          tint="violet" emoji="💰" label="Loan Amount"
+          value={fmt(loanAmount)}
+          sub="Principal borrowed"
+        />
         <Tile
           tint="emerald" emoji="✓" label="Total Paid"
           value={fmt(totalPaid)}
