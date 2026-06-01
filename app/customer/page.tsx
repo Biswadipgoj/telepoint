@@ -832,7 +832,13 @@ export default function CustomerPortal() {
                   <div>
                     <p className="text-xs uppercase tracking-wide text-brand-700">Next amount due</p>
                     <p className="text-lg font-semibold text-ink">{fmt(dueSummary.totalDue)}</p>
-                    <p className="text-xs text-slate-500 mt-1">EMI {fmt(dueSummary.emiDue)} · Fine {fmt(dueSummary.totalFineRemaining)} · 1st charge {fmt(dueSummary.firstChargeDue)}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {[
+                        dueSummary.emiDue > 0 ? `EMI ${fmt(dueSummary.emiDue)}` : null,
+                        dueSummary.totalFineRemaining > 0 ? `Fine ${fmt(dueSummary.totalFineRemaining)}` : null,
+                        dueSummary.firstChargeDue > 0 ? `1st charge ${fmt(dueSummary.firstChargeDue)}` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-slate-500">Next due date</p>

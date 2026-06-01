@@ -49,6 +49,7 @@ interface EmiRow {
   fine_amount: number;
   fine_waived: boolean;
   fine_paid_amount: number;
+  partial_paid_amount?: number;
 }
 
 /**
@@ -108,6 +109,18 @@ function buildRetailerSection(
     // Fine Due: total accrued fine on all overdue EMIs as of today
     const fineDue = calculateTotalFineFromEmis(emis as unknown as EMISchedule[], baseFine, weeklyIncrement);
 
+    // EMI amount due: sum remaining balances on all pending EMIs up to end of month.
+    // For PARTIALLY_PAID EMIs this shows what still needs to be collected, not the full amount.
+    const pendingEmis = emis.filter(e =>
+      (e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID') && e.due_date <= endOfMonth,
+    );
+    const emiAmountDisplay = pendingEmis.length > 0
+      ? pendingEmis.reduce(
+          (sum, e) => sum + Math.max(0, Number(e.amount) - Number(e.partial_paid_amount || 0)),
+          0,
+        )
+      : (c.emi_amount ?? '');
+
     lines.push(csvRow([
       c.imei,
       sr,
@@ -116,7 +129,7 @@ function buildRetailerSection(
       c.alternate_number_1 ?? '',
       firstEmiDate,
       c.emi_due_day ?? '',
-      c.emi_amount ?? '',
+      emiAmountDisplay,
       firstEmiCharge,
       '',                              // remarks — blank for manual entry
       fineDue > 0 ? fineDue : '',
@@ -216,7 +229,7 @@ export async function GET(req: NextRequest) {
 
     const { data: rawEmis } = await svc
       .from('emi_schedule')
-      .select('customer_id, emi_no, due_date, amount, status, fine_amount, fine_waived, fine_paid_amount')
+      .select('customer_id, emi_no, due_date, amount, status, fine_amount, fine_waived, fine_paid_amount, partial_paid_amount')
       .in('customer_id', customers.map(c => c.id))
       .order('emi_no');
 
