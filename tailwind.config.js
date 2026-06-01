@@ -57,9 +57,20 @@ module.exports = {
     },
   },
   safelist: [
-    'bg-emerald-600', 'bg-amber-500', 'bg-rose-600', 'bg-slate-500',
-    'border-emerald-400', 'border-amber-400', 'border-rose-400', 'border-slate-300',
+    /* EMI card box — inline-styled but kept here as belt-and-suspenders */
     'rounded-2xl', 'overflow-hidden',
+    /* Card body text colors */
+    'text-rose-700', 'text-emerald-700', 'text-emerald-800', 'text-amber-700',
+    /* Edit button + divider */
+    'bg-slate-100', 'border-slate-100', 'border-slate-200', 'text-slate-700',
+    /* Desktop row separator */
+    'border-b-2',
+    /* Pending approval badge */
+    'bg-sky-100', 'text-sky-800', 'border-sky-300',
+    /* Paid / overdue badges */
+    'bg-emerald-100', 'text-emerald-800', 'border-emerald-300',
+    'bg-rose-100',   'text-rose-800',    'border-rose-300',
+    'bg-amber-100',  'text-amber-800',   'border-amber-300',
   ],
   plugins: [],
 };

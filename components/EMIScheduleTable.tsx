@@ -310,7 +310,7 @@ export default function EMIScheduleTable({
                 isNext                           ? 'border-l-4 border-l-brand-500'   : 'border-l-4 border-l-slate-200';
 
               return (
-                <tr key={emi.id} className={`${rowBg} border-b-2 border-b-slate-100`}>
+                <tr key={emi.id} className={rowBg} style={{ borderBottom: '2px solid #f1f5f9' }}>
                   <td className={`font-semibold text-ink ${rowAccent}`}>
                     #{emi.emi_no}
                     {isNext && (
