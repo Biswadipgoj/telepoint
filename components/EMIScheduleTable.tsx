@@ -567,7 +567,7 @@ export default function EMIScheduleTable({
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden flex flex-col gap-3 p-3">
+      <div className="md:hidden flex flex-col gap-4 p-3">
         {sortedEmis.map(emi => {
           const today      = new Date();
           const dueDate    = new Date(emi.due_date);
@@ -585,49 +585,49 @@ export default function EMIScheduleTable({
           const emiPaid    = Math.max(0, Number(emi.partial_paid_amount || 0));
           const emiRemaining = Math.max(0, emiAmount - emiPaid);
 
-          const headerBg =
-            emi.status === 'APPROVED'       ? 'bg-emerald-600'  :
-            emi.status === 'PARTIALLY_PAID' ? 'bg-amber-500'    :
-            isOverdue                       ? 'bg-rose-600'     :
-            isNext                          ? 'bg-brand-600'    : 'bg-slate-500';
-
-          const cardBorder =
-            emi.status === 'APPROVED'       ? 'border-emerald-300' :
-            emi.status === 'PARTIALLY_PAID' ? 'border-amber-300'   :
-            isOverdue                       ? 'border-rose-300'    :
-            isNext                          ? 'border-brand-300'   : 'border-slate-300';
-
           return (
-            <div key={emi.id} className={`rounded-xl border-2 ${cardBorder} shadow-sm overflow-hidden`}>
-              {/* Card header — colored strip */}
-              <div className={`${headerBg} px-4 py-2.5 flex items-center justify-between gap-2`}>
+            /* Outer box — border color is a direct Tailwind literal per status */
+            <div
+              key={emi.id}
+              style={{ boxShadow: '0 2px 10px rgba(0,0,0,0.10)' }}
+              className={
+                emi.status === 'APPROVED'        ? 'rounded-2xl border-2 border-emerald-400 overflow-hidden' :
+                emi.status === 'PARTIALLY_PAID'  ? 'rounded-2xl border-2 border-amber-400 overflow-hidden'   :
+                isOverdue                        ? 'rounded-2xl border-2 border-rose-400 overflow-hidden'    :
+                isNext                           ? 'rounded-2xl border-2 border-brand-400 overflow-hidden'   :
+                                                   'rounded-2xl border-2 border-slate-300 overflow-hidden'
+              }
+            >
+              {/* Colored header — full solid background per status */}
+              <div className={
+                emi.status === 'APPROVED'        ? 'bg-emerald-600 px-4 py-3 flex items-center justify-between gap-2' :
+                emi.status === 'PARTIALLY_PAID'  ? 'bg-amber-500 px-4 py-3 flex items-center justify-between gap-2'   :
+                isOverdue                        ? 'bg-rose-600 px-4 py-3 flex items-center justify-between gap-2'    :
+                isNext                           ? 'bg-brand-600 px-4 py-3 flex items-center justify-between gap-2'   :
+                                                   'bg-slate-500 px-4 py-3 flex items-center justify-between gap-2'
+              }>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-white text-sm">EMI #{emi.emi_no}</span>
-                  {isNext && (
-                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">NEXT</span>
-                  )}
-                  {isLastEmi && (
-                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">LAST</span>
-                  )}
+                  <span className="font-bold text-white">EMI #{emi.emi_no}</span>
+                  {isNext && <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold">NEXT</span>}
+                  {isLastEmi && <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold">LAST</span>}
                 </div>
-                {/* White-tinted status pill — readable on any colored header */}
-                <span className="text-[10px] text-white font-bold bg-white/20 border border-white/30 px-2 py-0.5 rounded-full whitespace-nowrap">
-                  {emi.status === 'APPROVED'       ? '✓ PAID'        :
-                   emi.status === 'PARTIALLY_PAID' ? '◐ PARTIAL'     :
-                   emi.status === 'PENDING_APPROVAL' ? '⏳ PENDING'  :
-                   isOverdue                       ? '⚠ OVERDUE'     : 'UNPAID'}
+                <span className="text-[10px] font-bold text-white bg-white/20 border border-white/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {emi.status === 'APPROVED'        ? '✓ PAID'     :
+                   emi.status === 'PARTIALLY_PAID'  ? '◐ PARTIAL'  :
+                   emi.status === 'PENDING_APPROVAL'? '⏳ PENDING' :
+                   isOverdue                        ? '⚠ OVERDUE'  : 'UNPAID'}
                 </span>
               </div>
 
-              {/* Card body */}
-              <div className="bg-white p-4 space-y-3">
+              {/* White card body */}
+              <div className="bg-white px-4 py-3 space-y-3">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   <p className="text-ink-muted">Due Date</p>
                   <p className={`text-right num font-semibold ${isOverdue ? 'text-rose-700' : 'text-ink'}`}>
                     {format(dueDate, 'd MMM yyyy')}
                   </p>
                   <p className="text-ink-muted">EMI Amount</p>
-                  <p className="text-right num font-semibold">{fmt(emiAmount)}</p>
+                  <p className="text-right num font-semibold text-ink">{fmt(emiAmount)}</p>
 
                   {emi.status === 'PARTIALLY_PAID' && (
                     <>
@@ -676,11 +676,11 @@ export default function EMIScheduleTable({
                   )}
                 </div>
 
-                {/* Admin edit entry */}
+                {/* Admin edit button */}
                 {isAdmin && editingId !== emi.id && (
-                  <div className="flex gap-1.5 flex-wrap pt-2 border-t border-surface-3">
+                  <div className="pt-2 border-t border-slate-100">
                     <button onClick={() => beginEdit(emi)}
-                      className="text-[11px] px-2 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200 transition">
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition font-medium">
                       ✏ Edit
                     </button>
                   </div>
