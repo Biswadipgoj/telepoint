@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 
 type Tab = 'admin' | 'retailer';
 
@@ -42,11 +43,8 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-500 shadow-lg shadow-brand-500/30 mb-4">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <path d="M16 2L2 9V23L16 30L30 23V9L16 2Z" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" />
-              <circle cx="16" cy="14" r="4" fill="white" />
-            </svg>
+          <div className="inline-flex items-center justify-center mb-4">
+            <Logo size={64} className="rounded-2xl shadow-lg shadow-ink/20" />
           </div>
           <h1 className="text-3xl font-bold text-ink">EMI Management Portal</h1>
           <p className="text-ink-muted text-sm mt-1">Secure access for authorized users</p>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="tp-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b3e7d"/>
+      <stop offset="1" stop-color="#0a1f44"/>
+    </linearGradient>
+    <linearGradient id="tp-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5cc6ff"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#tp-bg)"/>
+  <g transform="rotate(-28 32 33)">
+    <ellipse cx="32" cy="33" rx="27" ry="11.5" fill="none" stroke="url(#tp-blue)" stroke-width="2.6" opacity="0.95"/>
+  </g>
+  <circle cx="50.5" cy="16.5" r="2.8" fill="#8ad4ff"/>
+  <rect x="15" y="15.5" width="34" height="9.5" rx="3" fill="#ffffff"/>
+  <rect x="27" y="22" width="10" height="28" rx="3.2" fill="#ffffff"/>
+  <rect x="32" y="24" width="5" height="24" rx="2.2" fill="url(#tp-blue)"/>
+</svg>
