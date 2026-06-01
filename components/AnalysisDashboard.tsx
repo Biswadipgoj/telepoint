@@ -26,8 +26,8 @@ const MONTHS = [
 
 interface PeriodMetrics {
   loanGiven: number;    // Loan disbursed for plans started this month (disburse_amount, else value − down payment)
-  collected: number;    // EMI + fines + charges actually collected this month
-  customers: number;    // Unique customers who opted into a plan this month
+  collected: number;    // Total amount collected this month (EMI + fines + charges)
+  customers: number;    // Distinct customers who PAID an EMI this month (across all retailers)
   dueEmis: number;      // EMI installments scheduled to fall due this month (bounce denominator)
   bouncedEmis: number;  // Of those due, how many are still unpaid (default / bounce)
 }
@@ -53,12 +53,22 @@ type VolumeMetric = 'customers' | 'loanGiven' | 'collected' | 'bounceRate';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-/** True when an ISO/date string falls in the given 1-indexed month + year. */
+/**
+ * True when a date/timestamp falls in the given 1-indexed month + year,
+ * evaluated in IST (the business timezone) so month boundaries line up with
+ * the rest of the app regardless of where this runs.
+ *   • date-only 'YYYY-MM-DD' -> read straight off the string (no tz shift).
+ *   • full timestamp        -> shift into IST, then compare.
+ */
 function inMonth(value: string | null | undefined, year: number, month: number): boolean {
   if (!value) return false;
-  const d = new Date(value.length <= 10 ? value + 'T00:00:00' : value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Number(value.slice(0, 4)) === year && Number(value.slice(5, 7)) === month;
+  }
+  const d = new Date(value);
   if (Number.isNaN(d.getTime())) return false;
-  return d.getFullYear() === year && d.getMonth() + 1 === month;
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000); // UTC+5:30
+  return ist.getUTCFullYear() === year && ist.getUTCMonth() + 1 === month;
 }
 
 /** Loan handed to the customer: prefer disburse_amount, else value − down payment. */
@@ -126,23 +136,29 @@ export default function AnalysisDashboard({
 
       const period = (y: number): PeriodMetrics => {
         const p: PeriodMetrics = { ...EMPTY_PERIOD };
+        // Loan Given: loans disbursed for plans that STARTED this month.
         for (const c of (customers || []) as CustomerRow[]) {
           if (COUNTED.has(c.status || '') && inMonth(c.purchase_date || c.created_at, y, month)) {
             p.loanGiven += loanOf(c);
-            p.customers += 1;
           }
         }
+        // Bounce: installments scheduled to fall due this month.
         for (const e of (emis || []) as Array<{ customer_id?: string; due_date?: string; status?: string }>) {
           if (e.customer_id && countedCustomerIds.has(e.customer_id) && inMonth(e.due_date, y, month)) {
             p.dueEmis += 1;
             if (e.status !== 'APPROVED') p.bouncedEmis += 1;
           }
         }
+        // Got + Customers: money collected this month and the distinct
+        // customers who actually paid an EMI this month.
+        const paid = new Set<string>();
         for (const pay of (payments || []) as Array<{ customer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
           if (pay.customer_id && countedCustomerIds.has(pay.customer_id) && pay.status === 'APPROVED' && inMonth(pay.approved_at, y, month)) {
             p.collected += Number(pay.total_amount || 0);
+            paid.add(pay.customer_id);
           }
         }
+        p.customers = paid.size;
         return p;
       };
 
@@ -191,7 +207,7 @@ export default function AnalysisDashboard({
         return { label: 'Bounce / Default Rate', last: bounceRate(lastY), current: bounceRate(thisY), fmt: (v: number) => `${v.toFixed(1)}%` };
       case 'customers':
       default:
-        return { label: 'New EMI Customers', last: lastY.customers, current: thisY.customers, fmt: (v: number) => String(Math.round(v)) };
+        return { label: 'Customers Who Paid EMI', last: lastY.customers, current: thisY.customers, fmt: (v: number) => String(Math.round(v)) };
     }
   }, [volumeMetric, thisY, lastY]);
 
@@ -232,7 +248,7 @@ export default function AnalysisDashboard({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Loan Given" value={formatCurrency(thisY.loanGiven)} prev={lastY.loanGiven} cur={thisY.loanGiven} theme="emerald" />
         <StatCard label="Got (Collected)" value={formatCurrency(thisY.collected)} prev={lastY.collected} cur={thisY.collected} theme="teal" />
-        <StatCard label="New Customers" value={String(thisY.customers)} prev={lastY.customers} cur={thisY.customers} theme="blue" />
+        <StatCard label="Customers Paid EMI" value={String(thisY.customers)} prev={lastY.customers} cur={thisY.customers} theme="blue" />
         <StatCard label="Bounce Rate" value={`${bounceRate(thisY).toFixed(1)}%`} prev={bounceRate(lastY)} cur={bounceRate(thisY)} theme="rose" invert />
       </div>
 
@@ -258,7 +274,7 @@ export default function AnalysisDashboard({
             <p className="section-header mb-0">📊 {volumeChart.label}</p>
             <div className="flex flex-wrap gap-1">
               {([
-                ['customers', 'Customers'],
+                ['customers', 'Paid EMI'],
                 ['loanGiven', 'Loan Given'],
                 ['collected', 'Collected'],
                 ['bounceRate', 'Bounce %'],
