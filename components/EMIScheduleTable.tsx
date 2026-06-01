@@ -599,22 +599,24 @@ export default function EMIScheduleTable({
 
           return (
             <div key={emi.id} className={`rounded-xl border-2 ${cardBorder} shadow-sm overflow-hidden`}>
-              {/* Card header — colored strip with EMI # and status */}
+              {/* Card header — colored strip */}
               <div className={`${headerBg} px-4 py-2.5 flex items-center justify-between gap-2`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-white text-sm">EMI #{emi.emi_no}</p>
+                  <span className="font-bold text-white text-sm">EMI #{emi.emi_no}</span>
                   {isNext && (
-                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">
-                      NEXT
-                    </span>
+                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">NEXT</span>
                   )}
                   {isLastEmi && (
-                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">
-                      LAST
-                    </span>
+                    <span className="text-[9px] bg-white/25 text-white border border-white/40 px-1.5 py-0.5 rounded-full font-bold tracking-wide">LAST</span>
                   )}
                 </div>
-                <StatusBadge emi={emi} isOverdue={isOverdue} />
+                {/* White-tinted status pill — readable on any colored header */}
+                <span className="text-[10px] text-white font-bold bg-white/20 border border-white/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                  {emi.status === 'APPROVED'       ? '✓ PAID'        :
+                   emi.status === 'PARTIALLY_PAID' ? '◐ PARTIAL'     :
+                   emi.status === 'PENDING_APPROVAL' ? '⏳ PENDING'  :
+                   isOverdue                       ? '⚠ OVERDUE'     : 'UNPAID'}
+                </span>
               </div>
 
               {/* Card body */}
@@ -686,7 +688,7 @@ export default function EMIScheduleTable({
 
               {/* Inline mobile edit form — Super Admin override panel */}
               {isAdmin && editingId === emi.id && (
-                <div className="mt-2 p-3 rounded-lg bg-white border border-slate-300 space-y-2">
+                <div className="mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
                   <p className="text-[10px] uppercase tracking-widest font-bold text-ink-muted">
                     ⚙ Super Admin Override
                   </p>
