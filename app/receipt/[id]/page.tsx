@@ -56,7 +56,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
           <a
             href={`/api/receipt/${params.id}`}
             download={`receipt-${params.id.slice(0, 8)}.html`}
-            style={{ padding: '0.625rem 1.25rem', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'in[...]
+            style={{ padding: '0.625rem 1.25rem', background: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}
           >
             ⬇️ Download Receipt
           </a>
@@ -78,7 +78,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
             )}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ padding: '0.625rem 1.25rem', background: '#25d366', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'in[...]
+            style={{ padding: '0.625rem 1.25rem', background: '#25d366', color: 'white', border: 'none', borderRadius: '0.75rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}
           >
             📲 Share WhatsApp
           </a>
@@ -89,7 +89,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
 
           {/* Brand header */}
           <div style={{ background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)', padding: '1.75rem 2rem', textAlign: 'center' }}>
-            <div style={{ width: '3.5rem', height: '3.5rem', background: 'rgba(255,255,255,0.2)', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto[...]
+            <div style={{ width: '3.5rem', height: '3.5rem', background: 'rgba(255,255,255,0.2)', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.75rem' }}>
               <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
                 <path d="M16 2L2 9V23L16 30L30 23V9L16 2Z" stroke="white" strokeWidth="2.5" fill="rgba(255,255,255,0.2)" />
                 <circle cx="16" cy="14" r="4" fill="white" />

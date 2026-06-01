@@ -12,13 +12,14 @@
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "date-fns": "^3.6.0",
+    "date-fns-tz": "^3.2.0",
+    "framer-motion": "^11.11.0",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.4.1",
-    "framer-motion": "^11.11.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
