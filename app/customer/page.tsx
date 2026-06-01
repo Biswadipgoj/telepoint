@@ -648,13 +648,18 @@ export default function CustomerPortal() {
             </div>
           </div>
 
-          <div className="divide-y divide-white/[0.03]">
+          <div className="p-3 space-y-2.5">
             {sortedEmis.map(emi => {
               const isOverdue = ['UNPAID', 'PARTIALLY_PAID'].includes(emi.status) && new Date(emi.due_date) < new Date();
               const daysLeft = differenceInDays(new Date(emi.due_date), new Date());
               const isUpcoming = ['UNPAID', 'PARTIALLY_PAID'].includes(emi.status) && daysLeft >= 0 && daysLeft <= 5;
               return (
-                <div key={emi.id} className={`flex items-center justify-between px-5 py-3.5 ${isOverdue ? 'bg-crimson-500/5' : isUpcoming ? 'bg-yellow-50/30' : ''}`}>
+                <div key={emi.id} className={`flex items-center justify-between px-4 py-3.5 rounded-xl border ${
+                  emi.status === 'APPROVED' ? 'bg-jade-500/5 border-jade-500/30' :
+                  isOverdue ? 'bg-crimson-500/5 border-crimson-500/40' :
+                  isUpcoming ? 'bg-yellow-50/40 border-yellow-400/50' :
+                  'bg-surface-2/50 border-surface-4'
+                }`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
                       emi.status === 'APPROVED' ? 'bg-jade-500/20 text-jade-400' :
