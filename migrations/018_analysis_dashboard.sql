@@ -24,16 +24,20 @@ CREATE INDEX IF NOT EXISTS idx_customers_created_at     ON customers(created_at)
 
 -- ── Per-period metric helper ────────────────────────────────────────────────
 -- Cohort dates: a customer is counted in the month their EMI plan started
--- (purchase_date, falling back to created_at). "invested" = phone inventory
--- cost financed that month. "collected" = every approved rupee received that
--- month. Bounce = installments due that month not yet fully APPROVED.
+-- (purchase_date, falling back to created_at). "loanGiven" = loan disbursed
+-- that month (disburse_amount, else phone value − down payment). "collected" =
+-- every approved rupee received that month. Bounce = installments due that
+-- month not yet fully APPROVED.
 CREATE OR REPLACE FUNCTION _emi_period_metrics(p_month INT, p_year INT)
 RETURNS JSONB
 LANGUAGE sql STABLE
 AS $$
   SELECT jsonb_build_object(
-    'invested', COALESCE((
-      SELECT SUM(purchase_value) FROM customers
+    'loanGiven', COALESCE((
+      SELECT SUM(CASE WHEN COALESCE(disburse_amount, 0) > 0
+                      THEN disburse_amount
+                      ELSE GREATEST(0, COALESCE(purchase_value, 0) - COALESCE(down_payment, 0)) END)
+      FROM customers
       WHERE EXTRACT(YEAR  FROM COALESCE(purchase_date, created_at::date)) = p_year
         AND EXTRACT(MONTH FROM COALESCE(purchase_date, created_at::date)) = p_month), 0),
     'customers', COALESCE((
@@ -45,10 +49,6 @@ AS $$
       WHERE status = 'APPROVED' AND approved_at IS NOT NULL
         AND EXTRACT(YEAR  FROM approved_at) = p_year
         AND EXTRACT(MONTH FROM approved_at) = p_month), 0),
-    'activeEmis', COALESCE((
-      SELECT COUNT(*) FROM emi_schedule
-      WHERE EXTRACT(YEAR  FROM due_date) = p_year
-        AND EXTRACT(MONTH FROM due_date) = p_month), 0),
     'dueEmis', COALESCE((
       SELECT COUNT(*) FROM emi_schedule
       WHERE EXTRACT(YEAR  FROM due_date) = p_year
