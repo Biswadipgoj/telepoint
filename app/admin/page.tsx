@@ -177,7 +177,14 @@ export default function AdminDashboard() {
   selectCustomerRef.current = selectCustomerFn;
 
   async function refreshSelectedCustomer() {
-    if (selectedCustomer) await selectCustomerFn(selectedCustomer);
+    if (!selectedCustomer) return;
+    const sb = supabaseRef.current;
+    const { data: fresh } = await sb
+      .from('customers')
+      .select('*, retailer:retailers(*)')
+      .eq('id', selectedCustomer.id)
+      .single();
+    await selectCustomerFn((fresh as Customer) ?? selectedCustomer);
   }
 
   async function handleMarkComplete() {
