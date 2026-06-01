@@ -8,8 +8,9 @@ import { formatCurrency } from '@/lib/formatters';
  * Analysis — Year-over-Year EMI business intelligence dashboard.
  *
  * Compares the selected month against the SAME month one year earlier
- * (e.g. June 2026 vs June 2025) across financial, volume and risk metrics,
- * and ranks partner retailers by leads generated and EMI collected.
+ * (e.g. June 2026 vs June 2025) across loan disbursal, collection, customer
+ * growth and bounce risk, and ranks partner retailers by leads generated and
+ * EMI collected.
  *
  * Data path: tries the optimized `get_emi_analysis(p_month, p_year)` RPC
  * first (see migrations/018_analysis_dashboard.sql). If that function is not
@@ -24,11 +25,10 @@ const MONTHS = [
 ];
 
 interface PeriodMetrics {
-  invested: number;     // Capital invested = Σ phone purchase value of plans started this month
+  loanGiven: number;    // Loan disbursed for plans started this month (disburse_amount, else value − down payment)
   collected: number;    // EMI + fines + charges actually collected this month
   customers: number;    // Unique customers who opted into a plan this month
-  activeEmis: number;   // EMI installments scheduled to fall due this month
-  dueEmis: number;      // Same as activeEmis — denominator for the bounce rate
+  dueEmis: number;      // EMI installments scheduled to fall due this month (bounce denominator)
   bouncedEmis: number;  // Of those due, how many are still unpaid (default / bounce)
 }
 
@@ -46,10 +46,10 @@ interface AnalysisData {
 }
 
 const EMPTY_PERIOD: PeriodMetrics = {
-  invested: 0, collected: 0, customers: 0, activeEmis: 0, dueEmis: 0, bouncedEmis: 0,
+  loanGiven: 0, collected: 0, customers: 0, dueEmis: 0, bouncedEmis: 0,
 };
 
-type VolumeMetric = 'customers' | 'activeEmis' | 'bounceRate' | 'profit';
+type VolumeMetric = 'customers' | 'loanGiven' | 'collected' | 'bounceRate';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -61,14 +61,15 @@ function inMonth(value: string | null | undefined, year: number, month: number):
   return d.getFullYear() === year && d.getMonth() + 1 === month;
 }
 
+/** Loan handed to the customer: prefer disburse_amount, else value − down payment. */
+function loanOf(c: { disburse_amount?: number | null; purchase_value?: number | null; down_payment?: number | null }): number {
+  const disbursed = Number(c.disburse_amount || 0);
+  if (disbursed > 0) return disbursed;
+  return Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
+}
+
 function bounceRate(p: PeriodMetrics): number {
   return p.dueEmis > 0 ? (p.bouncedEmis / p.dueEmis) * 100 : 0;
-}
-function netProfit(p: PeriodMetrics): number {
-  return p.collected - p.invested;
-}
-function profitMargin(p: PeriodMetrics): number {
-  return p.collected > 0 ? (netProfit(p) / p.collected) * 100 : 0;
 }
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -98,9 +99,9 @@ export default function AnalysisDashboard({
       // 2) Fallback: aggregate the raw tables in the browser.
       const [{ data: customers }, { data: emis }, { data: payments }, { data: retailers }] =
         await Promise.all([
-          supabase.from('customers').select('id, retailer_id, purchase_value, purchase_date, created_at'),
-          supabase.from('emi_schedule').select('due_date, status'),
-          supabase.from('payment_requests').select('retailer_id, total_amount, status, approved_at'),
+          supabase.from('customers').select('id, retailer_id, status, purchase_value, down_payment, disburse_amount, purchase_date, created_at'),
+          supabase.from('emi_schedule').select('customer_id, due_date, status'),
+          supabase.from('payment_requests').select('customer_id, retailer_id, total_amount, status, approved_at'),
           supabase.from('retailers').select('id, name'),
         ]);
 
@@ -108,24 +109,37 @@ export default function AnalysisDashboard({
         (retailers || []).map((r: { id: string; name: string }) => [r.id, r.name]),
       );
 
+      type CustomerRow = {
+        id?: string; retailer_id?: string; status?: string;
+        purchase_date?: string; created_at?: string;
+        purchase_value?: number; down_payment?: number; disburse_amount?: number;
+      };
+
+      // Count both active (RUNNING) and finished (COMPLETE) loans; exclude
+      // SETTLED early-closures and NPA write-offs from the business figures.
+      const COUNTED = new Set(['RUNNING', 'COMPLETE']);
+      const countedCustomerIds = new Set<string>(
+        ((customers || []) as CustomerRow[])
+          .filter((c) => c.id && COUNTED.has(c.status || ''))
+          .map((c) => c.id as string),
+      );
+
       const period = (y: number): PeriodMetrics => {
         const p: PeriodMetrics = { ...EMPTY_PERIOD };
-        for (const c of (customers || []) as Array<{ purchase_date?: string; created_at?: string; purchase_value?: number }>) {
-          const startDate = c.purchase_date || c.created_at;
-          if (inMonth(startDate, y, month)) {
-            p.invested += Number(c.purchase_value || 0);
+        for (const c of (customers || []) as CustomerRow[]) {
+          if (COUNTED.has(c.status || '') && inMonth(c.purchase_date || c.created_at, y, month)) {
+            p.loanGiven += loanOf(c);
             p.customers += 1;
           }
         }
-        for (const e of (emis || []) as Array<{ due_date?: string; status?: string }>) {
-          if (inMonth(e.due_date, y, month)) {
-            p.activeEmis += 1;
+        for (const e of (emis || []) as Array<{ customer_id?: string; due_date?: string; status?: string }>) {
+          if (e.customer_id && countedCustomerIds.has(e.customer_id) && inMonth(e.due_date, y, month)) {
             p.dueEmis += 1;
             if (e.status !== 'APPROVED') p.bouncedEmis += 1;
           }
         }
-        for (const pay of (payments || []) as Array<{ status?: string; approved_at?: string; total_amount?: number }>) {
-          if (pay.status === 'APPROVED' && inMonth(pay.approved_at, y, month)) {
+        for (const pay of (payments || []) as Array<{ customer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
+          if (pay.customer_id && countedCustomerIds.has(pay.customer_id) && pay.status === 'APPROVED' && inMonth(pay.approved_at, y, month)) {
             p.collected += Number(pay.total_amount || 0);
           }
         }
@@ -134,14 +148,14 @@ export default function AnalysisDashboard({
 
       // Leaderboards reflect the selected month of the CURRENT year.
       const leadMap = new Map<string, number>();
-      for (const c of (customers || []) as Array<{ retailer_id?: string; purchase_date?: string; created_at?: string }>) {
-        if (c.retailer_id && inMonth(c.purchase_date || c.created_at, year, month)) {
+      for (const c of (customers || []) as CustomerRow[]) {
+        if (c.retailer_id && COUNTED.has(c.status || '') && inMonth(c.purchase_date || c.created_at, year, month)) {
           leadMap.set(c.retailer_id, (leadMap.get(c.retailer_id) || 0) + 1);
         }
       }
       const collMap = new Map<string, number>();
-      for (const pay of (payments || []) as Array<{ retailer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
-        if (pay.retailer_id && pay.status === 'APPROVED' && inMonth(pay.approved_at, year, month)) {
+      for (const pay of (payments || []) as Array<{ customer_id?: string; retailer_id?: string; status?: string; approved_at?: string; total_amount?: number }>) {
+        if (pay.retailer_id && pay.customer_id && countedCustomerIds.has(pay.customer_id) && pay.status === 'APPROVED' && inMonth(pay.approved_at, year, month)) {
           collMap.set(pay.retailer_id, (collMap.get(pay.retailer_id) || 0) + Number(pay.total_amount || 0));
         }
       }
@@ -169,12 +183,12 @@ export default function AnalysisDashboard({
 
   const volumeChart = useMemo(() => {
     switch (volumeMetric) {
-      case 'activeEmis':
-        return { label: 'Active EMIs', last: lastY.activeEmis, current: thisY.activeEmis, fmt: (v: number) => String(Math.round(v)) };
+      case 'loanGiven':
+        return { label: 'Loan Given', last: lastY.loanGiven, current: thisY.loanGiven, fmt: formatCurrency };
+      case 'collected':
+        return { label: 'Got (Collected)', last: lastY.collected, current: thisY.collected, fmt: formatCurrency };
       case 'bounceRate':
         return { label: 'Bounce / Default Rate', last: bounceRate(lastY), current: bounceRate(thisY), fmt: (v: number) => `${v.toFixed(1)}%` };
-      case 'profit':
-        return { label: 'Net Profit', last: netProfit(lastY), current: netProfit(thisY), fmt: formatCurrency };
       case 'customers':
       default:
         return { label: 'New EMI Customers', last: lastY.customers, current: thisY.customers, fmt: (v: number) => String(Math.round(v)) };
@@ -216,20 +230,20 @@ export default function AnalysisDashboard({
 
       {/* Aspect comparison cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Net Profit" value={formatCurrency(netProfit(thisY))} prev={netProfit(lastY)} cur={netProfit(thisY)} theme="emerald" />
-        <StatCard label="Profit Margin" value={`${profitMargin(thisY).toFixed(1)}%`} prev={profitMargin(lastY)} cur={profitMargin(thisY)} theme="teal" suffix="pp" raw />
-        <StatCard label="Active EMIs" value={String(thisY.activeEmis)} prev={lastY.activeEmis} cur={thisY.activeEmis} theme="blue" />
-        <StatCard label="Bounce Rate" value={`${bounceRate(thisY).toFixed(1)}%`} prev={bounceRate(lastY)} cur={bounceRate(thisY)} theme="rose" suffix="pp" raw invert />
+        <StatCard label="Loan Given" value={formatCurrency(thisY.loanGiven)} prev={lastY.loanGiven} cur={thisY.loanGiven} theme="emerald" />
+        <StatCard label="Got (Collected)" value={formatCurrency(thisY.collected)} prev={lastY.collected} cur={thisY.collected} theme="teal" />
+        <StatCard label="New Customers" value={String(thisY.customers)} prev={lastY.customers} cur={thisY.customers} theme="blue" />
+        <StatCard label="Bounce Rate" value={`${bounceRate(thisY).toFixed(1)}%`} prev={bounceRate(lastY)} cur={bounceRate(thisY)} theme="rose" invert />
       </div>
 
       {/* YoY charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Financial: Invested vs Got */}
+        {/* Financial: Loan Given vs Got */}
         <div className="card p-6">
-          <p className="section-header">💰 Invested vs Got (Collected)</p>
+          <p className="section-header">💰 Loan Given vs Got (Collected)</p>
           <GroupedBars
             groups={[
-              { label: 'Invested', last: lastY.invested, current: thisY.invested },
+              { label: 'Loan Given', last: lastY.loanGiven, current: thisY.loanGiven },
               { label: 'Got', last: lastY.collected, current: thisY.collected },
             ]}
             fmt={formatCurrency}
@@ -245,9 +259,9 @@ export default function AnalysisDashboard({
             <div className="flex flex-wrap gap-1">
               {([
                 ['customers', 'Customers'],
-                ['activeEmis', 'Active EMIs'],
+                ['loanGiven', 'Loan Given'],
+                ['collected', 'Collected'],
                 ['bounceRate', 'Bounce %'],
-                ['profit', 'Net Profit'],
               ] as [VolumeMetric, string][]).map(([key, label]) => (
                 <button
                   key={key}
@@ -322,8 +336,7 @@ const STAT_THEMES: Record<string, string> = {
 function StatCard({
   label, value, prev, cur, theme, invert = false,
 }: {
-  label: string; value: string; prev: number; cur: number; theme: string;
-  suffix?: string; raw?: boolean; invert?: boolean;
+  label: string; value: string; prev: number; cur: number; theme: string; invert?: boolean;
 }) {
   return (
     <div className={`rounded-xl border-2 p-4 ${STAT_THEMES[theme]}`}>

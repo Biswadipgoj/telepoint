@@ -24,40 +24,47 @@ CREATE INDEX IF NOT EXISTS idx_customers_created_at     ON customers(created_at)
 
 -- ── Per-period metric helper ────────────────────────────────────────────────
 -- Cohort dates: a customer is counted in the month their EMI plan started
--- (purchase_date, falling back to created_at). "invested" = phone inventory
--- cost financed that month. "collected" = every approved rupee received that
--- month. Bounce = installments due that month not yet fully APPROVED.
+-- (purchase_date, falling back to created_at). "loanGiven" = loan disbursed
+-- that month (disburse_amount, else phone value − down payment). "collected" =
+-- every approved rupee received that month. Bounce = installments due that
+-- month not yet fully APPROVED.
 CREATE OR REPLACE FUNCTION _emi_period_metrics(p_month INT, p_year INT)
 RETURNS JSONB
 LANGUAGE sql STABLE
 AS $$
+  -- Counts both RUNNING (active) and COMPLETE (finished) loans; SETTLED
+  -- early-closures and NPA write-offs are excluded from the business figures.
   SELECT jsonb_build_object(
-    'invested', COALESCE((
-      SELECT SUM(purchase_value) FROM customers
-      WHERE EXTRACT(YEAR  FROM COALESCE(purchase_date, created_at::date)) = p_year
+    'loanGiven', COALESCE((
+      SELECT SUM(CASE WHEN COALESCE(disburse_amount, 0) > 0
+                      THEN disburse_amount
+                      ELSE GREATEST(0, COALESCE(purchase_value, 0) - COALESCE(down_payment, 0)) END)
+      FROM customers
+      WHERE status IN ('RUNNING', 'COMPLETE')
+        AND EXTRACT(YEAR  FROM COALESCE(purchase_date, created_at::date)) = p_year
         AND EXTRACT(MONTH FROM COALESCE(purchase_date, created_at::date)) = p_month), 0),
     'customers', COALESCE((
       SELECT COUNT(*) FROM customers
-      WHERE EXTRACT(YEAR  FROM COALESCE(purchase_date, created_at::date)) = p_year
+      WHERE status IN ('RUNNING', 'COMPLETE')
+        AND EXTRACT(YEAR  FROM COALESCE(purchase_date, created_at::date)) = p_year
         AND EXTRACT(MONTH FROM COALESCE(purchase_date, created_at::date)) = p_month), 0),
     'collected', COALESCE((
-      SELECT SUM(total_amount) FROM payment_requests
-      WHERE status = 'APPROVED' AND approved_at IS NOT NULL
-        AND EXTRACT(YEAR  FROM approved_at) = p_year
-        AND EXTRACT(MONTH FROM approved_at) = p_month), 0),
-    'activeEmis', COALESCE((
-      SELECT COUNT(*) FROM emi_schedule
-      WHERE EXTRACT(YEAR  FROM due_date) = p_year
-        AND EXTRACT(MONTH FROM due_date) = p_month), 0),
+      SELECT SUM(pr.total_amount) FROM payment_requests pr
+      JOIN customers c ON c.id = pr.customer_id AND c.status IN ('RUNNING', 'COMPLETE')
+      WHERE pr.status = 'APPROVED' AND pr.approved_at IS NOT NULL
+        AND EXTRACT(YEAR  FROM pr.approved_at) = p_year
+        AND EXTRACT(MONTH FROM pr.approved_at) = p_month), 0),
     'dueEmis', COALESCE((
-      SELECT COUNT(*) FROM emi_schedule
-      WHERE EXTRACT(YEAR  FROM due_date) = p_year
-        AND EXTRACT(MONTH FROM due_date) = p_month), 0),
+      SELECT COUNT(*) FROM emi_schedule es
+      JOIN customers c ON c.id = es.customer_id AND c.status IN ('RUNNING', 'COMPLETE')
+      WHERE EXTRACT(YEAR  FROM es.due_date) = p_year
+        AND EXTRACT(MONTH FROM es.due_date) = p_month), 0),
     'bouncedEmis', COALESCE((
-      SELECT COUNT(*) FROM emi_schedule
-      WHERE EXTRACT(YEAR  FROM due_date) = p_year
-        AND EXTRACT(MONTH FROM due_date) = p_month
-        AND status <> 'APPROVED'), 0)
+      SELECT COUNT(*) FROM emi_schedule es
+      JOIN customers c ON c.id = es.customer_id AND c.status IN ('RUNNING', 'COMPLETE')
+      WHERE EXTRACT(YEAR  FROM es.due_date) = p_year
+        AND EXTRACT(MONTH FROM es.due_date) = p_month
+        AND es.status <> 'APPROVED'), 0)
   );
 $$;
 
@@ -79,7 +86,7 @@ AS $$
       FROM (
         SELECT r.id, r.name, COUNT(c.id) AS cnt
         FROM retailers r
-        JOIN customers c ON c.retailer_id = r.id
+        JOIN customers c ON c.retailer_id = r.id AND c.status IN ('RUNNING', 'COMPLETE')
         WHERE EXTRACT(YEAR  FROM COALESCE(c.purchase_date, c.created_at::date)) = p_year
           AND EXTRACT(MONTH FROM COALESCE(c.purchase_date, c.created_at::date)) = p_month
         GROUP BY r.id, r.name
@@ -98,6 +105,7 @@ AS $$
         SELECT r.id, r.name, SUM(pr.total_amount) AS total
         FROM retailers r
         JOIN payment_requests pr ON pr.retailer_id = r.id
+        JOIN customers c ON c.id = pr.customer_id AND c.status IN ('RUNNING', 'COMPLETE')
         WHERE pr.status = 'APPROVED' AND pr.approved_at IS NOT NULL
           AND EXTRACT(YEAR  FROM pr.approved_at) = p_year
           AND EXTRACT(MONTH FROM pr.approved_at) = p_month
