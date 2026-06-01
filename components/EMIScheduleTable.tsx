@@ -408,9 +408,7 @@ export default function EMIScheduleTable({
                         </p>
                       </div>
                     ) : (
-                      <span className="num text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                        {fmt(0)}
-                      </span>
+                      <span className="text-xs text-ink-muted">—</span>
                     )}
                   </td>
 
@@ -617,8 +615,8 @@ export default function EMIScheduleTable({
                 )}
 
                 <p className="text-ink-muted">Fine Due</p>
-                <p className={`text-right num font-bold ${fineOutstanding > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-                  {fineOutstanding > 0 ? fmt(fineOutstanding) : fmt(0)}
+                <p className={`text-right num font-bold ${fineOutstanding > 0 ? 'text-rose-700' : 'text-ink-muted'}`}>
+                  {fineOutstanding > 0 ? fmt(fineOutstanding) : '—'}
                 </p>
 
                 {finePaid > 0 && (
