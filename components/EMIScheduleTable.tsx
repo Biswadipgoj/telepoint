@@ -419,6 +419,8 @@ export default function EMIScheduleTable({
                   {/* Paid On */}
                   <div className="rounded-xl border border-surface-4 bg-surface-2 px-3 py-2">
                     <p className="text-[10px] uppercase tracking-wide text-ink-muted font-bold">Paid On</p>
+
+                    {/* EMI payment — date/time, method, UTR */}
                     {emi.paid_at ? (
                       <p className="num text-xs font-bold text-emerald-800 mt-0.5">{fmtDateTime(emi.paid_at)}</p>
                     ) : emi.partial_paid_at ? (
@@ -426,14 +428,30 @@ export default function EMIScheduleTable({
                     ) : (
                       <p className="text-sm text-ink-muted mt-0.5">—</p>
                     )}
+                    {(emi.paid_at || emi.partial_paid_at) && emi.mode && (
+                      <p className="text-[10px] text-ink-muted mt-0.5">
+                        EMI method: <span className={`font-bold ${emi.mode === 'UPI' ? 'text-info' : 'text-success'}`}>{emi.mode}</span>
+                      </p>
+                    )}
                     {emi.utr && (
                       <p className="font-mono text-[10px] text-ink-muted mt-0.5">UTR {emi.utr}</p>
                     )}
-                    {emi.fine_paid_at && finePaid > 0 && (
-                      <p className="text-[10px] text-rose-700 mt-0.5">Fine paid: <span className="num">{fmtDateTime(emi.fine_paid_at)}</span></p>
-                    )}
-                    {finePaid > 0 && (emi.fine_utr || emi.utr) && (
-                      <p className="font-mono text-[10px] text-rose-700/80 mt-0.5">Fine UTR {emi.fine_utr || emi.utr}</p>
+
+                    {/* Fine payment — date/time, method, UTR */}
+                    {finePaid > 0 && (emi.fine_paid_at || emi.fine_mode || emi.fine_utr) && (
+                      <div className="mt-1.5 pt-1.5 border-t border-surface-4">
+                        {emi.fine_paid_at && (
+                          <p className="text-[10px] text-rose-700">Fine paid: <span className="num">{fmtDateTime(emi.fine_paid_at)}</span></p>
+                        )}
+                        {(emi.fine_mode || emi.mode) && (
+                          <p className="text-[10px] text-rose-700/90 mt-0.5">
+                            Fine method: <span className="font-bold">{emi.fine_mode || emi.mode}</span>
+                          </p>
+                        )}
+                        {(emi.fine_utr || emi.utr) && (
+                          <p className="font-mono text-[10px] text-rose-700/80 mt-0.5">Fine UTR {emi.fine_utr || emi.utr}</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

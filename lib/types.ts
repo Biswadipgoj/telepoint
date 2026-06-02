@@ -84,6 +84,7 @@ export interface EMISchedule {
   fine_paid_amount: number;
   fine_paid_at?: string;
   fine_utr?: string;
+  fine_mode?: 'CASH' | 'UPI';
   collected_by_role?: 'admin' | 'retailer';
   collected_by_user_id?: string;
   created_at: string;
