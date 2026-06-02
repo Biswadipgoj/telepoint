@@ -11,6 +11,7 @@ import CustomerPaymentSummary from '@/components/CustomerPaymentSummary';
 import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
+import SmartAlertPopup from '@/components/SmartAlertPopup';
 import PaymentModal from '@/components/PaymentModal';
 import toast from 'react-hot-toast';
 import { format, differenceInDays } from 'date-fns';
@@ -37,7 +38,7 @@ export default function RetailerDashboard() {
   const [fineSettings, setFineSettings] = useState({ default_fine_amount: 450, weekly_fine_increment: 25 });
   const [upcomingEmis, setUpcomingEmis] = useState<{
     id: string; emi_no: number; due_date: string; amount: number;
-    customer_name: string; imei: string; mobile: string;
+    customer_name: string; imei: string; mobile: string; customer_id: string;
   }[] | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
 
@@ -126,6 +127,7 @@ export default function RetailerDashboard() {
         customer_name: cust?.customer_name || '',
         imei: cust?.imei || '',
         mobile: cust?.mobile || '',
+        customer_id: row.customer_id,
       };
     });
 
@@ -201,6 +203,25 @@ export default function RetailerDashboard() {
 
   // Always keep ref in sync
   selectCustomerRef.current = selectCustomer;
+
+  // Open a customer from the Upcoming EMIs list — fetch the full record
+  // (scoped to this retailer) and show the same detail view as search.
+  async function openCustomerById(customerId: string) {
+    const sb = supabaseRef.current;
+    const retailerId = retailerRef.current?.id;
+    if (!retailerId) return;
+    const { data } = await sb
+      .from('customers')
+      .select('*, retailer:retailers(*)')
+      .eq('id', customerId)
+      .eq('retailer_id', retailerId)
+      .single();
+    if (!data) return;
+    const cust = data as Customer;
+    setSearchResults([cust]);
+    await selectCustomer(cust);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   const paidCount = customerEmis.filter(e => e.status === 'APPROVED').length;
 
@@ -281,7 +302,12 @@ export default function RetailerDashboard() {
                   {upcomingEmis.map(e => {
                     const daysLeft = Math.ceil((new Date(e.due_date).getTime() - Date.now()) / 86400000);
                     return (
-                      <tr key={e.id}>
+                      <tr
+                        key={e.id}
+                        onClick={() => openCustomerById(e.customer_id)}
+                        className="cursor-pointer hover:bg-brand-50 transition-colors"
+                        title="Open customer"
+                      >
                         <td>
                           <p className="text-ink font-medium">{e.customer_name}</p>
                           <p className="text-xs font-num text-ink-muted">{e.imei}</p>
@@ -441,7 +467,20 @@ export default function RetailerDashboard() {
               breakdown={breakdown}
               baseFine={fineSettings.default_fine_amount}
               weeklyIncrement={fineSettings.weekly_fine_increment}
+              hideLoanAmount
             />
+
+            {/* Smart alert popup — EMI due in 5 days / fine due / 1st EMI charge pending */}
+            {breakdown && (
+              <SmartAlertPopup
+                key={selectedCustomer.id}
+                fineDue={breakdown.fine_due ?? 0}
+                daysUntilDue={breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null}
+                nextEmiNo={breakdown.next_emi_no}
+                nextEmiAmount={breakdown.next_emi_amount}
+                firstChargeDue={breakdown.first_emi_charge_due ?? 0}
+              />
+            )}
 
             {breakdown && (() => {
               const daysLeft = breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null;

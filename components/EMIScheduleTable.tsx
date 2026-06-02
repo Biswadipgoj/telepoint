@@ -432,6 +432,9 @@ export default function EMIScheduleTable({
                     {emi.fine_paid_at && finePaid > 0 && (
                       <p className="text-[10px] text-rose-700 mt-0.5">Fine paid: <span className="num">{fmtDateTime(emi.fine_paid_at)}</span></p>
                     )}
+                    {finePaid > 0 && (emi.fine_utr || emi.utr) && (
+                      <p className="font-mono text-[10px] text-rose-700/80 mt-0.5">Fine UTR {emi.fine_utr || emi.utr}</p>
+                    )}
                   </div>
                 </div>
 
