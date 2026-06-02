@@ -32,6 +32,8 @@ interface Props {
   retailerName?: string;
   baseFine: number;
   weeklyIncrement: number;
+  /** When true, the "Loan Book" tile is hidden (retailer view — super admin only). */
+  hideLoanAmount?: boolean;
 }
 
 interface Totals {
@@ -50,7 +52,7 @@ interface Totals {
 
 const fmt = formatCurrency;
 
-export default function RetailerPaymentSummary({ retailerId, retailerName, baseFine, weeklyIncrement }: Props) {
+export default function RetailerPaymentSummary({ retailerId, retailerName, baseFine, weeklyIncrement, hideLoanAmount = false }: Props) {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -188,8 +190,10 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-4">
-        <Tile tint="violet" emoji="💰" label="Loan Book" value={fmt(t.loanAmount)} sub="Total disbursed (active)" />
+      <div className={`grid grid-cols-2 ${hideLoanAmount ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-px bg-surface-4`}>
+        {!hideLoanAmount && (
+          <Tile tint="violet" emoji="💰" label="Loan Book" value={fmt(t.loanAmount)} sub="Total disbursed (active)" />
+        )}
         <Tile tint="emerald" emoji="✓" label="Collected" value={fmt(totalRevenueCollected)} sub="EMI + Fines + 1st Charge" />
         <Tile tint={t.emiDue > 0 ? 'rose' : 'emerald'} emoji="⏳" label="EMI Due" value={fmt(t.emiDue)} sub={`${t.overdueCustomers} customer${t.overdueCustomers === 1 ? '' : 's'} overdue`} />
         <Tile tint={t.fineDue > 0 ? 'rose' : 'emerald'} emoji="⚠" label="Fine Due" value={fmt(t.fineDue)} sub={`Paid ${fmt(t.fineCollected)} so far`} />

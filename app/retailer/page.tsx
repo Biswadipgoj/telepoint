@@ -42,6 +42,12 @@ export default function RetailerDashboard() {
   }[] | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
 
+  // Direct message to the selected customer (pops up on their screen)
+  const [showMsgBox, setShowMsgBox] = useState(false);
+  const [msgText, setMsgText] = useState('');
+  const [msgImage, setMsgImage] = useState('');
+  const [msgSending, setMsgSending] = useState(false);
+
   // Broadcast messages
   const [broadcastPopups, setBroadcastPopups] = useState<{ id: string; message: string; image_url?: string | null; expires_at: string; sender_name?: string; sender_role?: string }[]>([]);
   const [dismissedBroadcasts, setDismissedBroadcasts] = useState<Set<string>>(new Set());
@@ -223,6 +229,32 @@ export default function RetailerDashboard() {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // Send a direct broadcast to the selected customer — it pops up on the
+  // customer's own login screen the next time they open the app.
+  async function sendCustomerMessage() {
+    if (!selectedCustomer || !msgText.trim()) return;
+    setMsgSending(true);
+    try {
+      const expires_at = new Date(Date.now() + 7 * 86400000).toISOString();
+      const res = await fetch('/api/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_customer_id: selectedCustomer.id,
+          message: msgText.trim(),
+          image_url: msgImage.trim() || null,
+          expires_at,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || 'Failed to send'); return; }
+      toast.success(`Message sent to ${selectedCustomer.customer_name}`);
+      setMsgText(''); setMsgImage(''); setShowMsgBox(false);
+    } finally {
+      setMsgSending(false);
+    }
+  }
+
   const paidCount = customerEmis.filter(e => e.status === 'APPROVED').length;
 
   return (
@@ -252,6 +284,7 @@ export default function RetailerDashboard() {
               retailerName={retailer.name}
               baseFine={fineSettings.default_fine_amount}
               weeklyIncrement={fineSettings.weekly_fine_increment}
+              hideLoanAmount
             />
           </div>
         )}
@@ -460,6 +493,49 @@ export default function RetailerDashboard() {
 
             {/* Customer details first, then the payment summary directly beneath. */}
             <CustomerDetailPanel customer={selectedCustomer} paidCount={paidCount} totalEmis={selectedCustomer.emi_tenure} />
+
+            {/* Direct message to this customer — pops up on their screen */}
+            <div className="card overflow-hidden">
+              <button
+                onClick={() => setShowMsgBox(v => !v)}
+                className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-surface-2 transition-colors"
+              >
+                <span className="text-sm font-semibold text-ink">📢 Message this customer</span>
+                <span className="text-xs text-ink-muted">{showMsgBox ? 'Close' : 'Send a popup'}</span>
+              </button>
+              {showMsgBox && (
+                <div className="px-5 pb-4 pt-1 space-y-3 border-t border-surface-4 animate-fade-in">
+                  <textarea
+                    value={msgText}
+                    onChange={e => setMsgText(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder={`Write a message for ${selectedCustomer.customer_name}…`}
+                    className="input w-full resize-none"
+                  />
+                  <input
+                    type="url"
+                    value={msgImage}
+                    onChange={e => setMsgImage(e.target.value)}
+                    placeholder="Optional image URL"
+                    className="input w-full"
+                  />
+                  {msgImage.trim() && (
+                    <img src={msgImage} alt="" className="max-h-32 rounded-xl border border-surface-4 object-cover" />
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-ink-muted">Pops up on the customer&apos;s screen · valid 7 days</p>
+                    <button
+                      onClick={sendCustomerMessage}
+                      disabled={msgSending || !msgText.trim()}
+                      className="btn-primary text-sm"
+                    >
+                      {msgSending ? 'Sending…' : 'Send Message'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <CustomerPaymentSummary
               customer={selectedCustomer}

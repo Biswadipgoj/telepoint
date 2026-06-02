@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       .from('broadcast_messages')
       .select('id, message, image_url, expires_at, sender_name, sender_role')
       .eq('target_retailer_id', customer.retailer_id)
+      .or(`target_customer_id.is.null,target_customer_id.eq.${customer.id}`)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false });
 
@@ -130,6 +131,7 @@ export async function POST(req: NextRequest) {
     .from('broadcast_messages')
     .select('id, message, image_url, expires_at, sender_name, sender_role')
     .eq('target_retailer_id', (customer as Record<string, unknown>).retailer_id as string)
+    .or(`target_customer_id.is.null,target_customer_id.eq.${(customer as Record<string, unknown>).id as string}`)
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 
