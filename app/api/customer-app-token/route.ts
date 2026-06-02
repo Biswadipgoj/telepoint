@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
   const { data: broadcasts } = await svc.from('broadcast_messages')
     .select('id, message, image_url, expires_at, sender_name, sender_role')
     .eq('target_retailer_id', customer.retailer_id)
+    .or(`target_customer_id.is.null,target_customer_id.eq.${customer.id}`)
     .gte('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 
