@@ -83,6 +83,7 @@ export interface EMISchedule {
   fine_last_calculated_at?: string;
   fine_paid_amount: number;
   fine_paid_at?: string;
+  fine_utr?: string;
   collected_by_role?: 'admin' | 'retailer';
   collected_by_user_id?: string;
   created_at: string;

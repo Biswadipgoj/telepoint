@@ -192,6 +192,7 @@ export async function GET(
 
       <div class="section-title">Transaction</div>
       <div class="kv"><span class="kv-label">Payment Mode</span><span class="kv-value bold" style="color:${request.mode === 'UPI' ? '#1d4ed8' : '#16a34a'};">${request.mode}</span></div>
+      ${request.utr ? `<div class="kv"><span class="kv-label">UTR / Reference</span><span class="kv-value mono" style="font-size:0.72rem;">${request.utr}</span></div>` : ''}
       <div class="kv"><span class="kv-label">Date & Time</span><span class="kv-value mono" style="font-size:0.72rem;">${fmtDate(request.created_at)}</span></div>
       <div class="kv"><span class="kv-label">Status</span><span class="kv-value bold" style="color:${statusColor};">${statusLabel}</span></div>
       ${request.approved_at ? `<div class="kv"><span class="kv-label">Approved</span><span class="kv-value mono" style="font-size:0.72rem;">${fmtDate(request.approved_at)}</span></div>` : ''}
