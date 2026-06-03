@@ -17,6 +17,7 @@ import PaymentModal from '@/components/PaymentModal';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
+import { fetchAllPaged } from '@/lib/dbFetch';
 import BottomNav from '@/components/BottomNav';
 import { addDays, subMonths, format, differenceInDays } from 'date-fns';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
@@ -1520,14 +1521,27 @@ function MetricDashboard({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at');
-      const { data: emis } = await supabase
-        .from('emi_schedule')
-        .select('customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount');
+      // Whole-table scans MUST be paged: PostgREST returns at most ~1000 rows,
+      // so an un-paged emi_schedule read only saw the first 1000 EMIs across the
+      // entire DB. With far more customers than that, each customer effectively
+      // contributed at most one EMI — which is exactly why the Live DB "due"
+      // figures looked like only a single EMI per customer was counted. Paging
+      // every row makes the totals reflect ALL of each customer's EMIs.
+      const customers = await fetchAllPaged<Customer>((from, to) =>
+        supabase
+          .from('customers')
+          .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at')
+          .order('id')
+          .range(from, to),
+      );
+      const emiList = await fetchAllPaged<EMISchedule>((from, to) =>
+        supabase
+          .from('emi_schedule')
+          .select('customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
+          .order('id')
+          .range(from, to),
+      );
 
-      const emiList = (emis as EMISchedule[]) || [];
       const byCustomer = new Map<string, EMISchedule[]>();
       for (const e of emiList) {
         const arr = byCustomer.get(e.customer_id) || [];
@@ -1546,7 +1560,7 @@ function MetricDashboard({
           ? Number(e.amount || 0)
           : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
 
-      for (const c of (customers as Customer[]) || []) {
+      for (const c of customers) {
         const custEmis = byCustomer.get(c.id) || [];
         const custFineDue = calculateTotalFineFromEmis(custEmis, baseFine, weeklyIncrement);
         const custEmiDue = custEmis.reduce(

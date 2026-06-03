@@ -3,28 +3,9 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { csvHeaders, csvCell, csvRow } from '@/lib/csv';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import { EMISchedule } from '@/lib/types';
+import { fetchAllByIds, fetchAllPaged } from '@/lib/dbFetch';
 
 const BOM = '﻿';
-
-// PostgREST caps a single response at ~1000 rows by default. A busy retailer
-// can have far more EMI rows than that (hundreds of running customers × up to
-// 12 EMIs each), so an un-paginated `.in()` query silently drops the overflow
-// — taking whole customers off the sheet. fetchAllRows walks every page so
-// nothing is left behind. The query MUST carry a stable, unique ordering or
-// rows can repeat/skip across page boundaries.
-async function fetchAllRows<T>(
-  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
-): Promise<T[]> {
-  const PAGE = 1000;
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await buildPage(from, from + PAGE - 1);
-    const batch = data ?? [];
-    out.push(...batch);
-    if (batch.length < PAGE) break;
-  }
-  return out;
-}
 
 const MONTHS_UPPER = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -236,7 +217,7 @@ export async function GET(req: NextRequest) {
   let isFirstSection = true;
 
   for (const retailer of retailerList) {
-    const customers = await fetchAllRows<CustomerRow>((from, to) =>
+    const customers = await fetchAllPaged<CustomerRow>((from, to) =>
       svc
         .from('customers')
         .select(
@@ -249,21 +230,21 @@ export async function GET(req: NextRequest) {
         // dropped defaulted customers that still show up in search.)
         .in('status', ['RUNNING', 'NPA'])
         .order('id')
-        .range(from, to) as unknown as PromiseLike<{ data: CustomerRow[] | null }>,
+        .range(from, to) as unknown as PromiseLike<{ data: CustomerRow[] | null; error: { message: string } | null }>,
     );
     if (customers.length === 0) continue;
 
     const custIds = customers.map(c => c.id);
     // Order by (customer_id, emi_no) — a unique pair — so pagination never
     // repeats or skips a row across page boundaries.
-    const rawEmis = await fetchAllRows<EmiRow>((from, to) =>
+    const rawEmis = await fetchAllByIds<EmiRow>(custIds, (chunk, from, to) =>
       svc
         .from('emi_schedule')
         .select('customer_id, emi_no, due_date, amount, status, fine_amount, fine_waived, fine_paid_amount, partial_paid_amount')
-        .in('customer_id', custIds)
+        .in('customer_id', chunk)
         .order('customer_id')
         .order('emi_no')
-        .range(from, to) as unknown as PromiseLike<{ data: EmiRow[] | null }>,
+        .range(from, to) as unknown as PromiseLike<{ data: EmiRow[] | null; error: { message: string } | null }>,
     );
 
     const emisByCustomer = new Map<string, EmiRow[]>();
