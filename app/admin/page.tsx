@@ -920,7 +920,7 @@ export default function AdminDashboard() {
 
               <p className="section-header">Download Customers</p>
               <p className="text-xs text-ink-muted mb-4">
-                The <strong>All Customers</strong> Excel export is a single .xlsx workbook with two tabs — Running and Complete. CSV downloads remain available for legacy use.
+                The <strong>All Customers</strong> Excel export is a single .xlsx workbook with one tab per status — Running, Complete, Settled and NPA — so every customer is included. CSV downloads remain available for legacy use.
               </p>
               <div className="flex flex-wrap gap-3">
                 <a
@@ -931,7 +931,7 @@ export default function AdminDashboard() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
                   </svg>
-                  📗 All Customers (Excel · 2 tabs)
+                  📗 All Customers (Excel · 4 tabs)
                 </a>
                 <a
                   href="/api/export?type=running"
