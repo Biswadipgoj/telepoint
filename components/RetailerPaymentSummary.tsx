@@ -15,6 +15,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
+import { fetchAllByIds, fetchAllPaged } from '@/lib/dbFetch';
 import { EMISchedule } from '@/lib/types';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -60,12 +61,18 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
     const supabase = createClient();
     setLoading(true);
     try {
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at')
-        .eq('retailer_id', retailerId);
-
-      const customerList = (customers as Customer[] | null) ?? [];
+      // A big retailer (MAMA TELECOM has 1000+ customers and many thousands of
+      // EMI rows) blows past PostgREST's ~1000-row cap and URL-length limit on a
+      // naive `.in(customer_id, [...])`, so the totals were computed on a
+      // truncated slice — wrong collected/due figures. Page + chunk every read.
+      const customerList = await fetchAllPaged<Customer>((from, to) =>
+        supabase
+          .from('customers')
+          .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at')
+          .eq('retailer_id', retailerId)
+          .order('id')
+          .range(from, to),
+      );
       if (!customerList.length) {
         setTotals({
           customerCount: 0, runningCount: 0, loanAmount: 0, collected: 0,
@@ -76,12 +83,16 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
       }
 
       const ids = customerList.map(c => c.id);
-      const { data: emis } = await supabase
-        .from('emi_schedule')
-        .select('id, customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
-        .in('customer_id', ids);
+      const emiList = await fetchAllByIds<EMISchedule>(ids, (chunk, from, to) =>
+        supabase
+          .from('emi_schedule')
+          .select('id, customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
+          .in('customer_id', chunk)
+          .order('customer_id')
+          .order('emi_no')
+          .range(from, to),
+      );
 
-      const emiList = (emis as EMISchedule[] | null) ?? [];
       const byCustomer = new Map<string, EMISchedule[]>();
       for (const e of emiList) {
         const list = byCustomer.get(e.customer_id) ?? [];
