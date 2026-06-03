@@ -17,7 +17,6 @@ import PaymentModal from '@/components/PaymentModal';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
-import { fetchAllPaged } from '@/lib/dbFetch';
 import BottomNav from '@/components/BottomNav';
 import { addDays, subMonths, format, differenceInDays } from 'date-fns';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
@@ -1521,79 +1520,31 @@ function MetricDashboard({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Whole-table scans MUST be paged: PostgREST returns at most ~1000 rows,
-      // so an un-paged emi_schedule read only saw the first 1000 EMIs across the
-      // entire DB. With far more customers than that, each customer effectively
-      // contributed at most one EMI — which is exactly why the Live DB "due"
-      // figures looked like only a single EMI per customer was counted. Paging
-      // every row makes the totals reflect ALL of each customer's EMIs.
-      const customers = await fetchAllPaged<Customer>((from, to) =>
-        supabase
-          .from('customers')
-          .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at')
-          .order('id')
-          .range(from, to),
-      );
-      const emiList = await fetchAllPaged<EMISchedule>((from, to) =>
-        supabase
-          .from('emi_schedule')
-          .select('customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
-          .order('id')
-          .range(from, to),
-      );
-
-      const byCustomer = new Map<string, EMISchedule[]>();
-      for (const e of emiList) {
-        const arr = byCustomer.get(e.customer_id) || [];
-        arr.push(e);
-        byCustomer.set(e.customer_id, arr);
+      // Computed server-side over EVERY row (service client, no RLS, no 1000-row
+      // truncation). The old in-browser whole-table scan both undercounted at
+      // scale and could fail outright on big portfolios — leaving the dashboard
+      // blank. Now we just render a tiny totals payload.
+      const res = await fetch('/api/metrics', { cache: 'no-store' });
+      if (!res.ok) {
+        const e = await readJsonSafe<{ error?: string }>(res);
+        throw new Error(e?.error || `Metrics failed (${res.status})`);
       }
-
-      let loanAmount = 0, emiDue = 0, fineDue = 0, firstEmiChargeDue = 0,
-          emiCollected = 0, fineCollected = 0, firstEmiChargeCollected = 0;
-
-      // An APPROVED EMI is fully paid even if partial_paid_amount was never
-      // written (e.g. settlement / direct-approve paths set status only).
-      // Treat it as the full amount so collection reflects real payments.
-      const emiPaid = (e: EMISchedule) =>
-        e.status === 'APPROVED'
-          ? Number(e.amount || 0)
-          : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
-
-      for (const c of customers) {
-        const custEmis = byCustomer.get(c.id) || [];
-        const custFineDue = calculateTotalFineFromEmis(custEmis, baseFine, weeklyIncrement);
-        const custEmiDue = custEmis.reduce(
-          (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
-          0,
-        );
-
-        // 1st EMI charge: a one-time charge with both a due and a collected
-        // side. Previously only the due side was tracked, so paid charges
-        // silently dropped out of total collection.
-        const chargeAmount = Number(c.first_emi_charge_amount || 0);
-        const chargePaid = !!c.first_emi_charge_paid_at;
-        const custFirstChargeDue = chargeAmount > 0 && !chargePaid ? chargeAmount : 0;
-        const custFirstChargeCollected = chargeAmount > 0 && chargePaid ? chargeAmount : 0;
-
-        const loanFinished = c.status !== 'RUNNING';
-        const allFinesCleared = custFineDue <= 0 && custFirstChargeDue <= 0;
-        if (loanFinished && allFinesCleared) continue;
-
-        loanAmount              += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        emiDue                  += custEmiDue;
-        fineDue                 += custFineDue;
-        firstEmiChargeDue       += custFirstChargeDue;
-        emiCollected            += custEmis.reduce((s, e) => s + emiPaid(e), 0);
-        fineCollected           += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
-        firstEmiChargeCollected += custFirstChargeCollected;
-      }
-
-      setMetrics({ loanAmount, emiDue, fineDue, firstEmiChargeDue, emiCollected, fineCollected, firstEmiChargeCollected });
+      const d = await res.json();
+      setMetrics({
+        loanAmount: d.loanAmount,
+        emiDue: d.emiDue,
+        fineDue: d.fineDue,
+        firstEmiChargeDue: d.firstChargeDue,
+        emiCollected: d.emiCollected,
+        fineCollected: d.fineCollected,
+        firstEmiChargeCollected: d.firstChargeCollected,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load metrics');
     } finally {
       setLoading(false);
     }
-  }, [supabase, baseFine, weeklyIncrement]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
