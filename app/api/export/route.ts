@@ -118,33 +118,59 @@ function buildRowsForStatus(
   return rows;
 }
 
+// PostgREST returns at most ~1000 rows per request by default. The "all
+// customers" export pulls every customer (and every EMI) in the system, which
+// easily blows past that — an un-paginated query silently truncates, dropping
+// whole customers off the sheet. fetchAllRows walks every page. The query must
+// carry a stable, unique ordering so rows don't repeat or skip across pages.
+async function fetchAllRows<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await buildPage(from, from + PAGE - 1);
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
 async function loadCustomersAndEmis(
   svc: ReturnType<typeof createServiceClient>,
   statuses: string[],
   retailerId: string | null,
 ): Promise<{ customerList: CustomerRow[]; emiByCustomer: Map<string, EmiRow[]> }> {
-  let q = svc
-    .from('customers')
-    .select(
-      'id, customer_name, mobile, alternate_number_1, alternate_number_2, address, imei, model_no, ' +
-      'emi_amount, emi_tenure, emi_due_day, first_emi_charge_amount, first_emi_charge_paid_at, ' +
-      'emi_start_date, purchase_date, status, retailer:retailers(name)',
-    )
-    .in('status', statuses)
-    .order('customer_name');
-  if (retailerId) q = q.eq('retailer_id', retailerId);
-
-  const { data: customers } = await q;
-  const customerList = (customers as unknown as CustomerRow[] | null) ?? [];
+  const customerList = await fetchAllRows<CustomerRow>((from, to) => {
+    let q = svc
+      .from('customers')
+      .select(
+        'id, customer_name, mobile, alternate_number_1, alternate_number_2, address, imei, model_no, ' +
+        'emi_amount, emi_tenure, emi_due_day, first_emi_charge_amount, first_emi_charge_paid_at, ' +
+        'emi_start_date, purchase_date, status, retailer:retailers(name)',
+      )
+      .in('status', statuses)
+      .order('id')
+      .range(from, to);
+    if (retailerId) q = q.eq('retailer_id', retailerId);
+    return q as unknown as PromiseLike<{ data: CustomerRow[] | null }>;
+  });
 
   const customerIds = customerList.map(c => c.id);
   const emiByCustomer = new Map<string, EmiRow[]>();
   if (customerIds.length > 0) {
-    const { data: allEmis } = await svc
-      .from('emi_schedule')
-      .select('customer_id, emi_no, due_date, status, partial_paid_amount, amount')
-      .in('customer_id', customerIds);
-    for (const e of (allEmis as EmiRow[] | null) ?? []) {
+    // Order by (customer_id, emi_no) — a unique pair — for stable pagination.
+    const allEmis = await fetchAllRows<EmiRow>((from, to) =>
+      svc
+        .from('emi_schedule')
+        .select('customer_id, emi_no, due_date, status, partial_paid_amount, amount')
+        .in('customer_id', customerIds)
+        .order('customer_id')
+        .order('emi_no')
+        .range(from, to) as unknown as PromiseLike<{ data: EmiRow[] | null }>,
+    );
+    for (const e of allEmis) {
       const list = emiByCustomer.get(e.customer_id) ?? [];
       list.push(e);
       emiByCustomer.set(e.customer_id, list);
