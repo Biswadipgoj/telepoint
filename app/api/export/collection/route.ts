@@ -222,9 +222,12 @@ export async function GET(req: NextRequest) {
         'first_emi_charge_amount, first_emi_charge_paid_at',
       )
       .eq('retailer_id', retailer.id)
-      .eq('status', 'RUNNING');
+      // RUNNING + NPA: NPA accounts are defaulted but still owe money, so they
+      // belong on a collection sheet. (Previously RUNNING-only, which silently
+      // dropped defaulted customers that still show up in search.)
+      .in('status', ['RUNNING', 'NPA']);
 
-    const customers = (rawCustomers as CustomerRow[] | null) ?? [];
+    const customers = (rawCustomers as unknown as CustomerRow[] | null) ?? [];
     if (customers.length === 0) continue;
 
     const { data: rawEmis } = await svc

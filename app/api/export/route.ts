@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { buildCsv, csvHeaders } from '@/lib/csv';
-import { buildXlsx, xlsxHeaders, XlsxCell } from '@/lib/xlsx';
+import { buildXlsx, xlsxHeaders, XlsxCell, XlsxSheet } from '@/lib/xlsx';
 import { formatShortDateIST } from '@/lib/ist';
 
 // ── Customer column structure ────────────────────────────────────────────────
@@ -206,20 +206,26 @@ export async function GET(req: NextRequest) {
     retailerId = retailer.id;
   }
 
-  // ── Dual-sheet "All Customers" Excel export ───────────────────────────────
+  // ── Multi-sheet "All Customers" Excel export ──────────────────────────────
+  // One tab per customer status so NO customer the retailer has is ever
+  // dropped. Previously only RUNNING + COMPLETE were exported, silently
+  // omitting SETTLED and NPA customers even though they exist in the DB.
   if (type === 'all') {
-    const running = await loadCustomersAndEmis(svc, ['RUNNING'], retailerId);
-    const complete = await loadCustomersAndEmis(svc, ['COMPLETE'], retailerId);
+    const STATUS_TABS: { name: string; status: string }[] = [
+      { name: 'Running',  status: 'RUNNING'  },
+      { name: 'Complete', status: 'COMPLETE' },
+      { name: 'Settled',  status: 'SETTLED'  },
+      { name: 'NPA',      status: 'NPA'      },
+    ];
 
-    const runningRows = buildRowsForStatus(running.customerList, running.emiByCustomer);
-    const completeRows = buildRowsForStatus(complete.customerList, complete.emiByCustomer);
+    const sheets: XlsxSheet[] = [];
+    for (const tab of STATUS_TABS) {
+      const { customerList, emiByCustomer } = await loadCustomersAndEmis(svc, [tab.status], retailerId);
+      const rows = buildRowsForStatus(customerList, emiByCustomer);
+      sheets.push({ name: tab.name, header: HEADER, rows: rowsToXlsxCells(rows) });
+    }
 
-    const xlsxBuffer = buildXlsx({
-      sheets: [
-        { name: 'Running',  header: HEADER, rows: rowsToXlsxCells(runningRows) },
-        { name: 'Complete', header: HEADER, rows: rowsToXlsxCells(completeRows) },
-      ],
-    });
+    const xlsxBuffer = buildXlsx({ sheets });
 
     // ArrayBuffer slice copy — NextResponse accepts ArrayBuffer as a BodyInit.
     const ab = xlsxBuffer.buffer.slice(
