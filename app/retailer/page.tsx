@@ -47,6 +47,12 @@ export default function RetailerDashboard() {
   const [msgText, setMsgText] = useState('');
   const [msgImage, setMsgImage] = useState('');
   const [msgSending, setMsgSending] = useState(false);
+  // Broadcast-to-all-customers composer
+  const [showBcast, setShowBcast] = useState(false);
+  const [bcastText, setBcastText] = useState('');
+  const [bcastImage, setBcastImage] = useState('');
+  const [bcastDays, setBcastDays] = useState(7);
+  const [bcastSending, setBcastSending] = useState(false);
 
   // Broadcast messages
   const [broadcastPopups, setBroadcastPopups] = useState<{ id: string; message: string; image_url?: string | null; expires_at: string; sender_name?: string; sender_role?: string }[]>([]);
@@ -255,6 +261,34 @@ export default function RetailerDashboard() {
     }
   }
 
+  // Send a broadcast to EVERY customer of this retailer. The backend stores it
+  // with the retailer scope and no specific customer, so it pops up on all of
+  // the retailer's customers' apps (with the optional image).
+  async function sendRetailerBroadcast() {
+    if (!bcastText.trim()) return;
+    if (!confirm('Send this announcement to ALL your customers? It will pop up on every customer’s app.')) return;
+    setBcastSending(true);
+    try {
+      const expires_at = new Date(Date.now() + Math.max(1, bcastDays) * 86400000).toISOString();
+      const res = await fetch('/api/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // No target_customer_id → retailer-wide → reaches every customer.
+        body: JSON.stringify({
+          message: bcastText.trim(),
+          image_url: bcastImage.trim() || null,
+          expires_at,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error(data.error || 'Failed to send broadcast'); return; }
+      toast.success('Broadcast sent to all your customers');
+      setBcastText(''); setBcastImage(''); setShowBcast(false);
+    } finally {
+      setBcastSending(false);
+    }
+  }
+
   const paidCount = customerEmis.filter(e => e.status === 'APPROVED').length;
 
   return (
@@ -307,6 +341,65 @@ export default function RetailerDashboard() {
             </div>
           </div>
         ))}
+
+        {/* Broadcast to ALL my customers */}
+        <div className="card overflow-hidden mb-4 border-l-4 border-brand-500">
+          <button
+            onClick={() => setShowBcast(v => !v)}
+            className="w-full px-5 py-3 flex items-center justify-between text-left hover:bg-surface-2 transition-colors"
+          >
+            <span className="text-sm font-semibold text-ink">📣 Broadcast to all my customers</span>
+            <span className="text-xs text-ink-muted">{showBcast ? 'Close' : 'Send announcement'}</span>
+          </button>
+          {showBcast && (
+            <div className="px-5 pb-4 pt-1 space-y-3 border-t border-surface-4 animate-fade-in">
+              <textarea
+                value={bcastText}
+                onChange={e => setBcastText(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Write an announcement for all your customers…"
+                className="input w-full resize-none"
+              />
+              <input
+                type="url"
+                value={bcastImage}
+                onChange={e => setBcastImage(e.target.value)}
+                placeholder="Optional image URL (e.g. https://i.ibb.co/...)"
+                className="input w-full"
+              />
+              {bcastImage.trim() && (
+                <img src={bcastImage} alt="" className="max-h-32 rounded-xl border border-surface-4 object-cover" />
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="text-xs text-ink-muted flex items-center gap-2">
+                  Valid for
+                  <select
+                    value={bcastDays}
+                    onChange={e => setBcastDays(Number(e.target.value))}
+                    className="input py-1 text-xs w-auto"
+                  >
+                    <option value={1}>1 day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>7 days</option>
+                    <option value={15}>15 days</option>
+                    <option value={30}>30 days</option>
+                  </select>
+                </label>
+                <button
+                  onClick={sendRetailerBroadcast}
+                  disabled={bcastSending || !bcastText.trim()}
+                  className="btn-primary text-sm"
+                >
+                  {bcastSending ? 'Sending…' : 'Send to all customers'}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-muted">
+                Pops up on every one of your customers’ apps until it expires.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Upcoming EMI panel */}
         <div className="mb-4 flex flex-wrap gap-2 items-center">
