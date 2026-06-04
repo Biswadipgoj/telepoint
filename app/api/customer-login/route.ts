@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const { data: emis } = await serviceClient
       .from('emi_schedule')
-      .select('id, emi_no, due_date, amount, status, paid_at, mode, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
+      .select('id, emi_no, due_date, amount, status, paid_at, mode, utr, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
       .eq('customer_id', customer.id)
       .order('emi_no');
 
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
 
   const { data: emis } = await serviceClient
     .from('emi_schedule')
-    .select('id, emi_no, due_date, amount, status, paid_at, mode, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
+    .select('id, emi_no, due_date, amount, status, paid_at, mode, utr, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
     .eq('customer_id', customer.id)
     .order('emi_no');
 
