@@ -1,14 +1,22 @@
 # TelePoint → Google Sheets automatic backup
 
-This folder sets up a **near real-time mirror** of the portal database into a
+This folder sets up an **automatic mirror** of the portal database into a
 Google Sheet. A Google Apps Script polls a secured backup endpoint on the
-portal and refreshes one tab per table every minute, including all historical
-rows. If anything ever happens to the database, the sheet is a complete,
-recent copy.
+portal and refreshes one tab per table **every 12 hours**, including all
+historical rows. If anything ever happens to the database, the sheet is a
+complete, recent copy.
 
 ```
-Portal DB  ──/api/backup──▶  Apps Script (1-min timer)  ──▶  Google Sheet (1 tab/table)
+Portal DB  ──/api/backup──▶  Apps Script (12-hour timer)  ──▶  Google Sheet (1 tab/table)
 ```
+
+> **Why 12 hours and not every minute?** The original setup ran every minute.
+> At that rate the script makes ~11,500 `UrlFetchApp` calls a day, which blows
+> past Google's daily quota — after which every call fails and the sheet
+> **silently stops updating** (the "backup not working" symptom). Running twice
+> a day (16 calls/day) stays well within quota and is plenty for a safety
+> backup. If you previously installed the 1-minute version, just re-run
+> `setupTrigger` once — it removes the old trigger and installs the new one.
 
 ## What's here
 
@@ -54,15 +62,19 @@ The server side is the endpoint `GET /api/backup` (code in
    | `BACKUP_TOKEN` | the same secret you set on the server |
 4. Back in the editor, select the function **`setupTrigger`** and click **Run**.
    Approve the authorization prompt the first time. This:
-   - installs a time trigger that runs `backupAll` **every minute**, and
+   - installs a time trigger that runs `backupAll` **every 12 hours**, and
    - performs an immediate first full sync.
 5. Open the sheet — you'll see one tab per table plus a `_sync_status` tab
    showing the last sync time and per-table row counts.
 
 ## How it behaves
 
-- **Frequency:** every 1 minute (the shortest interval Apps Script allows).
-  That is the practical "near real-time / ASAP" ceiling for a pull-based mirror.
+- **Frequency:** every 12 hours (twice a day). This keeps the sheet within
+  Google's UrlFetchApp quota so it never silently stops updating, while still
+  being a fresh safety copy. Apps Script's `everyHours()` accepts
+  `1, 2, 4, 6, 8, 12` — 12 is the longest single-trigger interval.
+- **No overlapping runs:** `backupAll` takes a script lock, so a manual run
+  and a scheduled run can never collide and corrupt a tab mid-write.
 - **Full refresh:** every run clears each tab and rewrites it from the current
   DB, so previously-collected rows and any edits/corrections are always
   reflected — no stale leftovers.
@@ -77,16 +89,17 @@ The server side is the endpoint `GET /api/backup` (code in
 
 - Run **`removeTrigger`** in the Apps Script editor to stop automatic syncing.
 - Run **`backupAll`** any time for a manual on-demand sync.
-- To change the cadence, edit `everyMinutes(1)` in `setupTrigger` (Apps Script
-  supports `everyMinutes(1|5|10|15|30)` and `everyHours(...)`).
+- To change the cadence, edit `everyHours(12)` in `setupTrigger` (Apps Script
+  supports `everyHours(1|2|4|6|8|12)`, or `everyMinutes(1|5|10|15|30)` for more
+  frequent — but watch the daily quota note above).
 
-## Want true push (instant) instead of 1-minute pull?
+## Want more frequent / instant updates instead?
 
-The 1-minute pull is simple and robust. If you need *instant* updates on every
-write, the alternative is to push from the server to the Google Sheets API
-using a service account on each create/approve. That's more moving parts (a
-Google Cloud service account + the Sheets API client) and is documented as a
-follow-up — ask and it can be added.
+Every 12 hours is the reliable, quota-safe default for a safety backup. If you
+later need *instant* updates on every write, the alternative is to push from the
+server to the Google Sheets API using a service account on each create/approve.
+That's more moving parts (a Google Cloud service account + the Sheets API
+client) and is documented as a follow-up — ask and it can be added.
 
 ## Security notes
 
