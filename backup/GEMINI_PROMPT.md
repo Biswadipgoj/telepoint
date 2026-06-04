@@ -2,7 +2,8 @@
 
 Paste the prompt below into Gemini (e.g. Gemini in Google Sheets / Apps Script,
 or gemini.google.com). It will produce a Google Apps Script that turns your
-sheet into an automatic, near real-time backup of the TelePoint portal.
+sheet into an automatic backup of the TelePoint portal that refreshes every
+12 hours.
 
 After Gemini gives you the code: open your backup Google Sheet → **Extensions →
 Apps Script**, paste it in, set the two Script Properties (`PORTAL_URL`,
@@ -50,7 +51,11 @@ Apps Script**, paste it in, set the two Script Properties (`PORTAL_URL`,
 >    the `Asia/Kolkata` timezone, plus the per-table row counts / errors.
 > 6. A `setupTrigger()` function that deletes any existing time triggers for
 >    `backupAll`, then installs a new time-based trigger running `backupAll`
->    every 1 minute, and finally calls `backupAll()` once for an immediate sync.
+>    every 12 hours (`everyHours(12)`), and finally calls `backupAll()` once for
+>    an immediate sync. Do NOT use a 1-minute trigger: at that rate the script
+>    exceeds Google's daily UrlFetchApp quota and the sheet stops updating.
+>    Have `backupAll()` take a `LockService` script lock so a manual run and a
+>    scheduled run can't overlap.
 > 7. A `removeTrigger()` function that deletes the `backupAll` time triggers.
 > 8. Plain ES5-style Apps Script (use `var`, function declarations). Add concise
 >    comments. Do not hardcode the URL or token — only read them from Script

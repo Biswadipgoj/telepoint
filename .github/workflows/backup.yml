@@ -1,0 +1,56 @@
+name: Database backup
+
+# Pulls every table from the portal's /api/backup feed and commits the data
+# (JSON + CSV) into backups/latest/. Runs automatically every 12 hours; git
+# history preserves every previous snapshot for recovery.
+#
+# Setup (one time): Repo → Settings → Secrets and variables → Actions →
+# "New repository secret", add two:
+#   PORTAL_URL    e.g. https://your-portal.vercel.app
+#   BACKUP_TOKEN  the same secret set as BACKUP_TOKEN on the server
+#
+# You can also run it on demand from the Actions tab ("Run workflow").
+
+on:
+  schedule:
+    - cron: '0 */12 * * *' # 00:00 and 12:00 UTC every day
+  workflow_dispatch: {}
+
+# Allow the workflow to commit the backup files back to the repo.
+permissions:
+  contents: write
+
+# Never let two backup runs overlap.
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Pull database into backups/
+        env:
+          PORTAL_URL: ${{ secrets.PORTAL_URL }}
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: node backup/github-backup.mjs
+
+      - name: Commit snapshot if it changed
+        run: |
+          git config user.name  "telepoint-backup[bot]"
+          git config user.email "telepoint-backup@users.noreply.github.com"
+          git add backups/
+          if git diff --cached --quiet; then
+            echo "No database changes since last backup."
+          else
+            git commit -m "Database backup: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

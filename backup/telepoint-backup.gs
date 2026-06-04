@@ -12,8 +12,15 @@
  *        PORTAL_URL   e.g. https://your-portal.vercel.app
  *        BACKUP_TOKEN the same secret you set as BACKUP_TOKEN on the server
  *   3. Run `setupTrigger` once (authorize when prompted).
- *      It installs a time trigger that runs `backupAll` every minute.
+ *      It installs a time trigger that runs `backupAll` every 12 hours.
  *   4. Run `backupAll` once manually to do the first full pull.
+ *
+ * WHY 12 HOURS (not every minute): a 1-minute trigger fires ~1,440 times a day
+ * and each run makes one UrlFetchApp call per table (8), i.e. ~11,500 calls/day.
+ * That blows past Google's daily UrlFetchApp quota, after which every call
+ * throws and the sheet silently stops updating — the "backup not working"
+ * symptom. Twice a day (16 calls/day) stays comfortably within quota and is
+ * plenty for a safety mirror.
  */
 
 // Tables to mirror. Each becomes a tab with the same name.
@@ -92,26 +99,36 @@ function _writeSheet_(ss, table, payload) {
 
 /** Pulls every table and refreshes all tabs. Safe to run on a timer. */
 function backupAll() {
-  var cfg = _config_();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var summary = [];
-
-  for (var i = 0; i < TABLES.length; i++) {
-    var table = TABLES[i];
-    try {
-      var payload = _fetchTable_(cfg, table);
-      var n = _writeSheet_(ss, table, payload);
-      summary.push(table + ': ' + n);
-    } catch (err) {
-      summary.push(table + ': ERROR ' + err.message);
-    }
+  // Guard against overlapping runs (e.g. a manual run while a timed one is in
+  // flight). If another run holds the lock, skip rather than racing on writes.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30 * 1000)) {
+    return;
   }
+  try {
+    var cfg = _config_();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var summary = [];
 
-  // A small status tab so you can see the last sync at a glance.
-  var status = ss.getSheetByName('_sync_status') || ss.insertSheet('_sync_status');
-  status.clearContents();
-  status.getRange(1, 1, 1, 2).setValues([['Last sync (IST)', _nowIst_()]]);
-  status.getRange(3, 1, summary.length, 1).setValues(summary.map(function (s) { return [s]; }));
+    for (var i = 0; i < TABLES.length; i++) {
+      var table = TABLES[i];
+      try {
+        var payload = _fetchTable_(cfg, table);
+        var n = _writeSheet_(ss, table, payload);
+        summary.push(table + ': ' + n);
+      } catch (err) {
+        summary.push(table + ': ERROR ' + err.message);
+      }
+    }
+
+    // A small status tab so you can see the last sync at a glance.
+    var status = ss.getSheetByName('_sync_status') || ss.insertSheet('_sync_status');
+    status.clearContents();
+    status.getRange(1, 1, 1, 2).setValues([['Last sync (IST)', _nowIst_()]]);
+    status.getRange(3, 1, summary.length, 1).setValues(summary.map(function (s) { return [s]; }));
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function _nowIst_() {
@@ -119,9 +136,9 @@ function _nowIst_() {
 }
 
 /**
- * Installs a 1-minute time trigger for backupAll (the shortest Apps Script
- * allows — "near real-time"). Removes any existing backupAll triggers first so
- * re-running this never stacks duplicates.
+ * Installs a 12-hour time trigger for backupAll. Removes any existing backupAll
+ * triggers first so re-running this never stacks duplicates (and clears out an
+ * old every-minute trigger from a previous setup).
  */
 function setupTrigger() {
   var triggers = ScriptApp.getProjectTriggers();
@@ -130,7 +147,7 @@ function setupTrigger() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-  ScriptApp.newTrigger('backupAll').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('backupAll').timeBased().everyHours(12).create();
   backupAll(); // do an immediate first sync
 }
 
