@@ -299,6 +299,14 @@ export default function EMIScheduleTable({
           const overdueDays     = isOverdue ? differenceInDays(today, dueDate) : 0;
           const fineStartDate   = addDays(dueDate, 1);
 
+          // Payment method must always show for a paid EMI. The `mode` column is
+          // null on older / imported rows, so derive it: a UTR means it was UPI,
+          // otherwise a settled EMI was Cash.
+          const emiHasPayment = emi.status === 'APPROVED' || emi.status === 'PARTIALLY_PAID'
+            || !!emi.paid_at || !!emi.partial_paid_at;
+          const payMethod: '' | 'CASH' | 'UPI' =
+            (emi.mode as 'CASH' | 'UPI' | undefined) || (emi.utr ? 'UPI' : (emiHasPayment ? 'CASH' : ''));
+
           // Status-driven colours — inline styles so they survive CSS purge.
           const statusColor =
             emi.status === 'APPROVED'       ? { border: '#22c55e', header: '#16a34a' } :
@@ -428,12 +436,12 @@ export default function EMIScheduleTable({
                     ) : (
                       <p className="text-sm text-ink-muted mt-0.5">—</p>
                     )}
-                    {(emi.paid_at || emi.partial_paid_at) && emi.mode && (
+                    {emiHasPayment && payMethod && (
                       <p className="text-[10px] text-ink-muted mt-0.5">
-                        EMI method: <span className={`font-bold ${emi.mode === 'UPI' ? 'text-info' : 'text-success'}`}>{emi.mode}</span>
+                        EMI method: <span className={`font-bold ${payMethod === 'UPI' ? 'text-info' : 'text-success'}`}>{payMethod}</span>
                       </p>
                     )}
-                    {emi.utr && (
+                    {payMethod === 'UPI' && emi.utr && (
                       <p className="font-mono text-[10px] text-ink-muted mt-0.5">UTR {emi.utr}</p>
                     )}
 

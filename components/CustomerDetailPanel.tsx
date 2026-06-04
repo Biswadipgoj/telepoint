@@ -75,13 +75,20 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
     return url;
   }
 
-  const docs = [
-    { label: 'Customer Photo', url: customer.customer_photo_url },
-    { label: 'Aadhaar Front', url: customer.aadhaar_front_url },
-    { label: 'Aadhaar Back', url: customer.aadhaar_back_url },
-    { label: 'Bill', url: customer.bill_photo_url },
-    { label: 'EMI Card', url: customer.emi_card_photo_url },
-  ].filter(d => d.url);
+  // Retailers may only see the customer's photo. Aadhaar / bill / EMI-card
+  // images are sensitive KYC documents and stay admin-only.
+  const docs = (isAdmin
+    ? [
+        { label: 'Customer Photo', url: customer.customer_photo_url },
+        { label: 'Aadhaar Front', url: customer.aadhaar_front_url },
+        { label: 'Aadhaar Back', url: customer.aadhaar_back_url },
+        { label: 'Bill', url: customer.bill_photo_url },
+        { label: 'EMI Card', url: customer.emi_card_photo_url },
+      ]
+    : [
+        { label: 'Customer Photo', url: customer.customer_photo_url },
+      ]
+  ).filter(d => d.url);
 
   return (
     <div className="card overflow-hidden animate-fade-in">
