@@ -1,4 +1,87 @@
-# TelePoint → Google Sheets automatic backup
+# TelePoint database backup
+
+There are two ways to mirror the portal database for safekeeping. **The
+GitHub Actions method below is the recommended, working default** — it has no
+Google account, no Apps Script, and no daily quota to hit. The older Google
+Sheets method is kept further down as an optional alternative.
+
+Both read from the same secured endpoint, `GET /api/backup` (code in
+`app/api/backup/route.ts`).
+
+---
+
+# Method 1 (recommended): GitHub Actions → repo
+
+A scheduled GitHub Action runs **every 12 hours**, pulls every table from
+`/api/backup`, and commits the data as JSON + CSV into `backups/latest/`. The
+repo always holds a complete recent copy, and git history preserves every
+previous snapshot for point-in-time recovery.
+
+```
+Portal DB  ──/api/backup──▶  GitHub Action (12-hour cron)  ──▶  backups/latest/*.json + *.csv (committed)
+```
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/backup.yml` | The scheduled workflow (runs every 12 h). |
+| `backup/github-backup.mjs` | Node script that pulls the tables and writes the files. |
+| `backups/latest/` | The most recent snapshot (one JSON + one CSV per table). |
+| `backups/backup-manifest.json` | Last run time + per-table row counts. |
+
+## Setup (one time)
+
+1. **Server token** — generate a long random secret and set it on the portal:
+   ```bash
+   openssl rand -hex 32
+   ```
+   Add it as an environment variable `BACKUP_TOKEN` (e.g. Vercel → Project →
+   Settings → Environment Variables) and redeploy. Until it's set the endpoint
+   returns `401` for everyone (fail-closed).
+2. **Repo secrets** — in GitHub: **Settings → Secrets and variables → Actions
+   → New repository secret**, add two:
+   | Secret | Value |
+   |--------|-------|
+   | `PORTAL_URL` | `https://your-portal.vercel.app` (no trailing slash needed) |
+   | `BACKUP_TOKEN` | the same secret you set on the server |
+3. That's it. The workflow runs automatically every 12 hours. To run it now,
+   go to the **Actions** tab → **Database backup** → **Run workflow**.
+
+## How it behaves
+
+- **Frequency:** every 12 hours (`cron: '0 */12 * * *'`), plus on-demand from
+  the Actions tab. To change it, edit the `cron` line in the workflow.
+- **Full refresh:** each run rewrites `backups/latest/` from the current DB, so
+  there are never stale leftovers. A commit is only made when something changed.
+- **History:** every changed snapshot is its own commit, so you can recover any
+  past state from git (`git show <commit>:backups/latest/customers.csv`).
+- **All details:** every column of every whitelisted table is written. `jsonb`
+  / array columns are stored as JSON text in the CSV and as real JSON in `.json`.
+- **Tables mirrored:** `retailers`, `customers`, `emi_schedule`,
+  `payment_requests`, `payment_request_items`, `fine_settings`,
+  `broadcast_messages`, `audit_log`. To add/remove tables, edit the whitelist
+  in `app/api/backup/route.ts` — the script picks up the manifest automatically.
+
+## Verify
+
+```bash
+curl -H "Authorization: Bearer <BACKUP_TOKEN>" https://your-portal/api/backup
+# → {"generated_at":"…","tables":[{"table":"customers","count":1234}, …]}
+```
+
+## Security notes
+
+- The endpoint is **fail-closed**: no `BACKUP_TOKEN` configured → `401`.
+- Treat `BACKUP_TOKEN` like a password — it grants read access to all
+  backed-up tables. Rotate it by changing the value on both the server and the
+  GitHub repo secret.
+- Prefer the `Authorization: Bearer` header (used by the script) over the
+  `?token=` query form, which can leak into logs.
+
+---
+
+# Method 2 (optional): Google Sheets mirror
 
 This folder sets up an **automatic mirror** of the portal database into a
 Google Sheet. A Google Apps Script polls a secured backup endpoint on the
@@ -18,35 +101,9 @@ Portal DB  ──/api/backup──▶  Apps Script (12-hour timer)  ──▶  G
 > backup. If you previously installed the 1-minute version, just re-run
 > `setupTrigger` once — it removes the old trigger and installs the new one.
 
-## What's here
-
-| File | Purpose |
-|------|---------|
-| `telepoint-backup.gs` | The Apps Script that pulls data and writes the tabs. |
-| `GEMINI_PROMPT.md` | A prompt to give Gemini so it generates the script for you. |
-| `README.md` | This guide. |
-
-The server side is the endpoint `GET /api/backup` (code in
-`app/api/backup/route.ts`).
-
-## One-time server setup
-
-1. Generate a long random secret (this is your `BACKUP_TOKEN`):
-   ```bash
-   openssl rand -hex 32
-   ```
-2. Add it to the portal's environment variables (e.g. Vercel → Project →
-   Settings → Environment Variables):
-   ```
-   BACKUP_TOKEN = <the value from step 1>
-   ```
-   Redeploy so the variable takes effect. Until this is set the endpoint
-   returns `401` for everyone (fail-closed).
-3. Verify (replace host + token):
-   ```bash
-   curl -H "Authorization: Bearer <BACKUP_TOKEN>" https://your-portal/api/backup
-   # → {"generated_at":"…","tables":[{"table":"customers","count":1234}, …]}
-   ```
+Files: `telepoint-backup.gs` (the Apps Script) and `GEMINI_PROMPT.md` (a prompt
+that regenerates it). This method needs the same server `BACKUP_TOKEN` from
+Method 1 — set that first if you haven't.
 
 ## One-time Google Sheet setup
 
@@ -101,11 +158,6 @@ server to the Google Sheets API using a service account on each create/approve.
 That's more moving parts (a Google Cloud service account + the Sheets API
 client) and is documented as a follow-up — ask and it can be added.
 
-## Security notes
-
-- The endpoint is **fail-closed**: no `BACKUP_TOKEN` configured → `401`.
-- Treat `BACKUP_TOKEN` like a password. It grants read access to all backed-up
-  tables. Rotate it by changing the value on both the server and the Script
-  properties.
-- Prefer the `Authorization: Bearer` header (used by the script) over the
-  `?token=` query form, which can leak into logs.
+The same security notes from Method 1 apply: the endpoint is fail-closed, the
+`BACKUP_TOKEN` is a password (here it lives in the Sheet's Script properties),
+and the `Authorization: Bearer` header is preferred over `?token=`.
