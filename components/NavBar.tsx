@@ -29,7 +29,7 @@ export default function NavBar({ role, pendingCount = 0 }: NavBarProps) {
         {/* Logo */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <Logo size={32} className="rounded-lg shadow-sm" />
-          <span className="font-display font-bold text-ink text-base hidden sm:inline tracking-tight">Telepoint</span>
+          <span className="font-display font-bold text-ink text-base inline tracking-tight">Telepoint</span>
         </div>
 
         {/* Desktop nav links — hidden on mobile (BottomNav handles mobile) */}
