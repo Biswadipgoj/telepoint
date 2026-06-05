@@ -2,9 +2,10 @@
 
 import { Customer, Retailer } from '@/lib/types';
 import { format } from 'date-fns';
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import Image from 'next/image';
 import PhoneLockBadge from './PhoneLockBadge';
 import CustomerAppDownload from './CustomerAppDownload';
 
@@ -25,11 +26,11 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
   const progress = totalEmis > 0 ? (paidCount / totalEmis) * 100 : 0;
   const retailer = customer.retailer as Retailer | null;
 
-  const phones = [
+  const phones = useMemo(() => [
     { label: 'Primary', num: customer.mobile },
     ...(customer.alternate_number_1 ? [{ label: 'Alt 1', num: customer.alternate_number_1 }] : []),
     ...(customer.alternate_number_2 ? [{ label: 'Alt 2', num: customer.alternate_number_2 }] : []),
-  ];
+  ], [customer.mobile, customer.alternate_number_1, customer.alternate_number_2]);
 
   function buildWAMsg() {
     return [
@@ -97,31 +98,129 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
     customer.emi_card_photo_url
   ]);
 
+  // Anti-gravity swipe physics
+  const cardRef = useRef<HTMLDivElement>(null);
+  const photoRef = useRef<HTMLDivElement>(null);
+  const detailsRef = useRef<HTMLDivElement>(null);
+  const phoneRef = useRef<HTMLButtonElement>(null);
+
+  const startY = useRef(0);
+  const currentY = useRef(0);
+  const isSwiping = useRef(false);
+  const rafId = useRef<number | null>(null);
+
+  const updateTransforms = useCallback(() => {
+    if (!photoRef.current || !detailsRef.current || !phoneRef.current) return;
+    
+    // Clamp the swipe to -100px max upward
+    const pull = Math.max(-100, Math.min(0, currentY.current));
+    const dampened = pull * 0.55;
+
+    photoRef.current.style.transform = `translate3d(0, ${dampened * 1.3}px, 0) scale3d(${1 + Math.abs(dampened) * 0.0015}, ${1 + Math.abs(dampened) * 0.0015}, 1)`;
+    detailsRef.current.style.transform = `translate3d(0, ${dampened}px, 0)`;
+    
+    if (pull < -15) {
+      phoneRef.current.style.transform = `scale3d(1.05, 1.05, 1) translate3d(0, ${dampened * 0.4}px, 0)`;
+      phoneRef.current.style.boxShadow = `0 4px 16px rgba(22, 163, 74, 0.25)`;
+      phoneRef.current.style.borderColor = `#86efac`;
+      phoneRef.current.style.backgroundColor = `#dcfce7`;
+    } else {
+      phoneRef.current.style.transform = `translate3d(0, 0, 0) scale3d(1, 1, 1)`;
+      phoneRef.current.style.boxShadow = ``;
+      phoneRef.current.style.borderColor = ``;
+      phoneRef.current.style.backgroundColor = ``;
+    }
+  }, []);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      isSwiping.current = true;
+      startY.current = e.touches[0].clientY;
+      currentY.current = 0;
+      if (photoRef.current) photoRef.current.style.transition = 'none';
+      if (detailsRef.current) detailsRef.current.style.transition = 'none';
+      if (phoneRef.current) phoneRef.current.style.transition = 'none';
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isSwiping.current) return;
+      const y = e.touches[0].clientY;
+      const deltaY = y - startY.current;
+      
+      if (deltaY > 0) return; // Only allow swipe UP
+      
+      currentY.current = deltaY;
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+      rafId.current = requestAnimationFrame(updateTransforms);
+    };
+
+    const onTouchEnd = () => {
+      isSwiping.current = false;
+      currentY.current = 0;
+      
+      const springTransition = 'transform 0.6s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.6s cubic-bezier(0.25, 1, 0.5, 1), border-color 0.6s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.6s cubic-bezier(0.25, 1, 0.5, 1)';
+      
+      if (photoRef.current) {
+        photoRef.current.style.transition = springTransition;
+        photoRef.current.style.transform = 'translate3d(0, 0, 0) scale3d(1, 1, 1)';
+      }
+      if (detailsRef.current) {
+        detailsRef.current.style.transition = springTransition;
+        detailsRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
+      if (phoneRef.current) {
+        phoneRef.current.style.transition = springTransition;
+        phoneRef.current.style.transform = 'translate3d(0, 0, 0) scale3d(1, 1, 1)';
+        phoneRef.current.style.boxShadow = '';
+        phoneRef.current.style.borderColor = '';
+        phoneRef.current.style.backgroundColor = '';
+      }
+    };
+
+    card.addEventListener('touchstart', onTouchStart, { passive: true });
+    card.addEventListener('touchmove', onTouchMove, { passive: true });
+    card.addEventListener('touchend', onTouchEnd, { passive: true });
+    card.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      card.removeEventListener('touchstart', onTouchStart);
+      card.removeEventListener('touchmove', onTouchMove);
+      card.removeEventListener('touchend', onTouchEnd);
+      card.removeEventListener('touchcancel', onTouchEnd);
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+    };
+  }, [updateTransforms]);
+
   return (
-    <div className="card overflow-hidden animate-fade-in">
+    <div ref={cardRef} className="card overflow-hidden animate-fade-in will-change-transform">
       {/* Header row */}
       <div className="flex items-start gap-4 p-5 border-b border-surface-4">
         {/* Photo */}
-        <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden animate-photo-in gpu-layer">
+        <div ref={photoRef} className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden animate-photo-in gpu-layer will-change-transform">
           <div className="absolute inset-0 bg-amber-50 flex items-center justify-center">
             <span className="text-3xl font-bold text-amber-400 font-display select-none leading-none">
               {customer.customer_name?.[0]?.toUpperCase() ?? '?'}
             </span>
           </div>
           {customer.customer_photo_url && (
-            <img
+            <Image
               src={ibbDirect(customer.customer_photo_url)}
               alt="Photo"
+              fill
               className="absolute inset-0 w-full h-full object-cover"
               loading="eager"
-              decoding="async"
-              style={{ imageRendering: '-webkit-optimize-contrast' } as React.CSSProperties}
+              quality={100}
+              priority
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           )}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div ref={detailsRef} className="flex-1 min-w-0 will-change-transform">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
               <h2 className="text-xl font-bold text-ink font-display leading-tight">{customer.customer_name}</h2>
@@ -147,12 +246,13 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
 
           {/* Phones + share */}
           <div className="flex flex-wrap gap-2 mt-2.5">
-            {phones.map(({ label, num }) => (
+            {phones.map(({ label, num }, idx) => (
               <button
                 key={num}
+                ref={idx === 0 ? phoneRef : null}
                 onClick={() => copyNum(num)}
                 title={`Copy ${label} (${num})`}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all will-change-transform ${
                   copiedNum === num ? 'border-success bg-success-light text-success' : 'border-surface-4 text-ink-muted hover:border-brand-300 hover:text-ink'
                 }`}
               >
@@ -281,13 +381,15 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
           <p className="text-xs font-semibold text-ink-muted uppercase tracking-widest mb-3">Documents</p>
           <div className="flex flex-wrap gap-3">
             {docs.map(d => (
-              <a key={d.label} href={d.url!} target="_blank" rel="noopener noreferrer" className="group">
-                <img
+              <a key={d.label} href={d.url!} target="_blank" rel="noopener noreferrer" className="group relative block h-20 w-28 overflow-hidden rounded-xl border border-surface-4 group-hover:border-brand-300 transition-colors">
+                <Image
                   src={ibbDirect(d.url)}
                   alt={d.label}
-                  className="h-20 w-28 object-cover rounded-xl border border-surface-4 group-hover:border-brand-300 transition-colors"
+                  fill
+                  sizes="120px"
+                  quality={80}
+                  className="object-cover"
                   loading="lazy"
-                  decoding="async"
                   onError={e => {
                     const img = e.target as HTMLImageElement;
                     img.style.display = 'none';
@@ -295,10 +397,10 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
                     if (fb) fb.style.display = 'flex';
                   }}
                 />
-                <div className="hidden h-20 w-28 rounded-xl border border-surface-4 bg-surface-3 items-center justify-center">
+                <div className="hidden absolute inset-0 bg-surface-3 items-center justify-center">
                   <p className="text-[10px] text-ink-muted text-center px-2">Preview unavailable</p>
                 </div>
-                <p className="text-[10px] text-ink-muted mt-1 text-center">{d.label}</p>
+                <p className="absolute bottom-0 inset-x-0 bg-black/50 text-[10px] text-white mt-1 text-center py-0.5">{d.label}</p>
               </a>
             ))}
           </div>

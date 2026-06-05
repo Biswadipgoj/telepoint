@@ -12,13 +12,15 @@ import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import SmartAlertPopup from '@/components/SmartAlertPopup';
-import PaymentModal from '@/components/PaymentModal';
 import { SearchResultsSkeleton } from '@/components/SkeletonLoaders';
 import toast from 'react-hot-toast';
 import { format, differenceInDays } from 'date-fns';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
+
+const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n);

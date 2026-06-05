@@ -1,22 +1,25 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 /** Skeleton for a single customer search result card */
 export const CustomerCardSkeleton = React.memo(function CustomerCardSkeleton() {
   return (
-    <div className="px-4 py-3.5 border-l-4 border-surface-4 flex flex-col gap-2 animate-fade-in">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="skeleton h-5 w-40 mb-1.5" />
-          <div className="skeleton h-3.5 w-28" />
+    <div className="px-4 py-3.5 border-l-4 border-surface-4 flex gap-4 animate-fade-in transition-opacity duration-300">
+      <div className="skeleton w-12 h-12 rounded-xl shrink-0" />
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="skeleton h-5 w-40 mb-1.5" />
+            <div className="skeleton h-3.5 w-28" />
+          </div>
+          <div className="skeleton h-6 w-20 rounded-full shrink-0" />
         </div>
-        <div className="skeleton h-6 w-20 rounded-full shrink-0" />
-      </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-1">
-        <div className="skeleton h-3.5 w-36" />
-        <div className="skeleton h-3.5 w-28" />
-        <div className="skeleton h-3.5 w-24" />
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          <div className="skeleton h-3.5 w-24" />
+          <div className="skeleton h-3.5 w-28" />
+          <div className="skeleton h-3.5 w-20" />
+        </div>
       </div>
     </div>
   );
@@ -24,10 +27,17 @@ export const CustomerCardSkeleton = React.memo(function CustomerCardSkeleton() {
 
 /** Skeleton for search results list (multiple cards) */
 export const SearchResultsSkeleton = React.memo(function SearchResultsSkeleton({ count = 3 }: { count?: number }) {
+  const [isSlow, setIsSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setIsSlow(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="card overflow-hidden animate-fade-in">
-      <div className="px-5 py-3 border-b border-surface-4">
+    <div className="card overflow-hidden animate-fade-in transition-opacity duration-500">
+      <div className="px-5 py-3 border-b border-surface-4 flex justify-between items-center bg-surface-2">
         <div className="skeleton h-3.5 w-48" />
+        {isSlow && <span className="text-xs font-medium text-brand-600 animate-pulse">Searching…</span>}
       </div>
       <div className="divide-y divide-surface-3">
         {Array.from({ length: count }).map((_, i) => (
@@ -40,17 +50,25 @@ export const SearchResultsSkeleton = React.memo(function SearchResultsSkeleton({
 
 /** Skeleton for the customer detail panel */
 export const CustomerDetailSkeleton = React.memo(function CustomerDetailSkeleton() {
+  const [isSlow, setIsSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setIsSlow(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="card overflow-hidden animate-fade-in">
+    <div className="card overflow-hidden animate-fade-in transition-opacity duration-500">
       {/* Header */}
-      <div className="flex items-start gap-4 p-5 border-b border-surface-4">
+      <div className="flex items-start gap-4 p-5 border-b border-surface-4 relative">
+        {isSlow && <div className="absolute top-4 right-5 text-xs font-medium text-brand-600 animate-pulse">Loading…</div>}
         <div className="skeleton w-20 h-20 rounded-2xl shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="skeleton h-6 w-48 mb-2" />
           <div className="skeleton h-4 w-32 mb-3" />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <div className="skeleton h-7 w-20 rounded-full" />
             <div className="skeleton h-7 w-28 rounded-lg" />
+            <div className="skeleton h-7 w-24 rounded-lg" />
           </div>
         </div>
       </div>

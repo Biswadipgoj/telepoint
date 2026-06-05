@@ -9,18 +9,20 @@ import SearchInput from '@/components/SearchInput';
 import CustomerDetailPanel from '@/components/CustomerDetailPanel';
 import CustomerPaymentSummary from '@/components/CustomerPaymentSummary';
 import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
-import CustomerFormModal from '@/components/CustomerFormModal';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import SmartAlertPopup from '@/components/SmartAlertPopup';
-import PaymentModal from '@/components/PaymentModal';
 import { SearchResultsSkeleton } from '@/components/SkeletonLoaders';
-import AnalysisDashboard from '@/components/AnalysisDashboard';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
 import { addDays, subMonths, format, differenceInDays } from 'date-fns';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
+import dynamic from 'next/dynamic';
+
+const CustomerFormModal = dynamic(() => import('@/components/CustomerFormModal'), { ssr: false });
+const PaymentModal = dynamic(() => import('@/components/PaymentModal'), { ssr: false });
+const AnalysisDashboard = dynamic(() => import('@/components/AnalysisDashboard'), { ssr: false });
 
 type Tab = 'search' | 'retailers' | 'reports' | 'analysis' | 'broadcast';
 
