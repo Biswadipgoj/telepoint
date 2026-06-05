@@ -32,15 +32,15 @@ export default function BroadcastAnimator({ broadcasts }: { broadcasts: { id: st
   const dismiss = useCallback((id: string) => { setDismissed(p => new Set([...p, id])); setBanners(p => p.filter(b => b.id !== id)); }, []);
 
   const posStyle = (s: Stage): React.CSSProperties => {
-    if (s === 'enter') return { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%) scale(0.9)', opacity: 0, transition: 'all 0.3s cubic-bezier(0.16,1,0.3,1)', zIndex: 70 };
-    if (s === 'center') return { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', opacity: 1, zIndex: 70 };
-    if (s === 'shutter') return { position: 'fixed', top: '8px', left: '50%', transform: 'translate(-50%,0)', opacity: 1, transition: 'all 0.4s cubic-bezier(0.16,1,0.3,1)', zIndex: 70 };
-    if (s === 'shake') return { position: 'fixed', top: '8px', left: '50%', transform: 'translate(-50%,0)', opacity: 1, animation: 'bc-shake 0.5s ease', zIndex: 70 };
+    if (s === 'enter') return { position: 'fixed', top: '50%', left: '50%', transform: 'translate3d(-50%,-50%,0) scale3d(0.9,0.9,1)', opacity: 0, transition: 'all 0.3s cubic-bezier(0.25,1,0.5,1)', zIndex: 70, willChange: 'transform, opacity', backfaceVisibility: 'hidden' };
+    if (s === 'center') return { position: 'fixed', top: '50%', left: '50%', transform: 'translate3d(-50%,-50%,0) scale3d(1,1,1)', opacity: 1, transition: 'all 0.3s cubic-bezier(0.25,1,0.5,1)', zIndex: 70, willChange: 'transform, opacity', backfaceVisibility: 'hidden' };
+    if (s === 'shutter') return { position: 'fixed', top: '8px', left: '50%', transform: 'translate3d(-50%,0,0)', opacity: 1, transition: 'all 0.4s cubic-bezier(0.25,1,0.5,1)', zIndex: 70, willChange: 'transform, opacity', backfaceVisibility: 'hidden' };
+    if (s === 'shake') return { position: 'fixed', top: '8px', left: '50%', transform: 'translate3d(-50%,0,0)', opacity: 1, animation: 'bc-shake 0.5s cubic-bezier(0.25,1,0.5,1)', zIndex: 70, willChange: 'transform, opacity', backfaceVisibility: 'hidden' };
     return {};
   };
 
   return (<>
-    <style jsx global>{`@keyframes bc-shake { 0%{transform:translate(-50%,0)} 15%{transform:translate(calc(-50% - 4px),0)} 30%{transform:translate(calc(-50% + 4px),0)} 45%{transform:translate(calc(-50% - 2px),0)} 60%{transform:translate(calc(-50% + 2px),0)} 100%{transform:translate(-50%,0)} }`}</style>
+    <style jsx global>{`@keyframes bc-shake { 0%{transform:translate3d(-50%,0,0)} 15%{transform:translate3d(calc(-50% - 4px),0,0)} 30%{transform:translate3d(calc(-50% + 4px),0,0)} 45%{transform:translate3d(calc(-50% - 2px),0,0)} 60%{transform:translate3d(calc(-50% + 2px),0,0)} 100%{transform:translate3d(-50%,0,0)} }`}</style>
     {current && (stage === 'enter' || stage === 'center') && <div className="fixed inset-0 z-[65] bg-black/40 backdrop-blur-sm" />}
     {current && stage !== 'done' && (<div style={{ ...posStyle(stage), width: '90vw', maxWidth: '380px' }}><Card b={current} /></div>)}
     {banners.filter(b => !dismissed.has(b.id)).map((b, i) => (

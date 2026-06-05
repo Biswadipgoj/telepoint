@@ -17,6 +17,7 @@ import { createClient } from '@/lib/supabase/client';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import { EMISchedule } from '@/lib/types';
 import { formatCurrency } from '@/lib/formatters';
+import { PaymentSummarySkeleton } from './SkeletonLoaders';
 
 type Customer = {
   id: string;
@@ -159,6 +160,10 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
   }, [retailerId, baseFine, weeklyIncrement]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (loading && !totals) {
+    return <PaymentSummarySkeleton />;
+  }
 
   const t = totals ?? {
     customerCount: 0, runningCount: 0, loanAmount: 0, collected: 0,

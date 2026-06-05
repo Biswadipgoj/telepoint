@@ -2,7 +2,7 @@
 
 import { Customer, Retailer } from '@/lib/types';
 import { format } from 'date-fns';
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import PhoneLockBadge from './PhoneLockBadge';
@@ -19,7 +19,7 @@ function fmt(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n);
 }
 
-export default function CustomerDetailPanel({ customer, paidCount, totalEmis, isAdmin }: Props) {
+const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCount, totalEmis, isAdmin }: Props) {
   const [copiedNum, setCopiedNum] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const progress = totalEmis > 0 ? (paidCount / totalEmis) * 100 : 0;
@@ -75,20 +75,20 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
     return url;
   }
 
-  const docs = [
+  const docs = useMemo(() => [
     { label: 'Customer Photo', url: customer.customer_photo_url },
     { label: 'Aadhaar Front', url: customer.aadhaar_front_url },
     { label: 'Aadhaar Back', url: customer.aadhaar_back_url },
     { label: 'Bill', url: customer.bill_photo_url },
     { label: 'EMI Card', url: customer.emi_card_photo_url },
-  ].filter(d => d.url);
+  ].filter(d => d.url), [customer.customer_photo_url, customer.aadhaar_front_url, customer.aadhaar_back_url, customer.bill_photo_url, customer.emi_card_photo_url]);
 
   return (
     <div className="card overflow-hidden animate-fade-in">
       {/* Header row */}
       <div className="flex items-start gap-4 p-5 border-b border-surface-4">
         {/* Photo */}
-        <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden">
+        <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden animate-photo-in gpu-layer">
           <div className="absolute inset-0 bg-amber-50 flex items-center justify-center">
             <span className="text-3xl font-bold text-amber-400 font-display select-none leading-none">
               {customer.customer_name?.[0]?.toUpperCase() ?? '?'}
@@ -99,6 +99,9 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
               src={ibbDirect(customer.customer_photo_url)}
               alt="Photo"
               className="absolute inset-0 w-full h-full object-cover"
+              loading="eager"
+              decoding="async"
+              style={{ imageRendering: '-webkit-optimize-contrast' } as React.CSSProperties}
               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           )}
@@ -269,6 +272,8 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
                   src={ibbDirect(d.url)}
                   alt={d.label}
                   className="h-20 w-28 object-cover rounded-xl border border-surface-4 group-hover:border-brand-300 transition-colors"
+                  loading="lazy"
+                  decoding="async"
                   onError={e => {
                     const img = e.target as HTMLImageElement;
                     img.style.display = 'none';
@@ -309,4 +314,6 @@ export default function CustomerDetailPanel({ customer, paidCount, totalEmis, is
       )}
     </div>
   );
-}
+});
+
+export default CustomerDetailPanel;

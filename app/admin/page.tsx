@@ -13,6 +13,7 @@ import CustomerFormModal from '@/components/CustomerFormModal';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import PaymentModal from '@/components/PaymentModal';
+import { SearchResultsSkeleton } from '@/components/SkeletonLoaders';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
@@ -452,7 +453,10 @@ export default function AdminDashboard() {
 
             <SearchInput onSearch={handleSearch} loading={searchLoading} autoFocus />
 
-            {searchResults === null && (
+            {/* Search loading skeleton */}
+            {searchLoading && <SearchResultsSkeleton count={3} />}
+
+            {!searchLoading && searchResults === null && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="w-20 h-20 rounded-3xl bg-surface-2 border border-surface-4 flex items-center justify-center mb-5">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(232,184,0,0.4)" strokeWidth="1.5">
@@ -464,8 +468,8 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {searchResults !== null && searchResults.length === 0 && (
-              <div className="text-center py-16">
+            {!searchLoading && searchResults !== null && searchResults.length === 0 && (
+              <div className="text-center py-16 animate-fade-in">
                 <p className="text-ink-muted">No customers found. Try a different search term.</p>
               </div>
             )}
@@ -476,7 +480,7 @@ export default function AdminDashboard() {
                   <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found — tap a card to view</span>
                 </div>
                 <div className="divide-y divide-surface-3">
-                  {searchResults.map((c) => {
+                  {searchResults.map((c, index) => {
                     const rowTint =
                       c.status === 'RUNNING'  ? 'hover:bg-emerald-50' :
                       c.status === 'SETTLED'  ? 'hover:bg-amber-50' :
@@ -499,7 +503,7 @@ export default function AdminDashboard() {
                       <button
                         key={c.id}
                         onClick={() => selectCustomerFn(c)}
-                        className={`w-full text-left px-4 py-3.5 border-l-4 ${stripe} ${rowTint} transition-colors flex flex-col gap-2`}
+                        className={`w-full text-left px-4 py-3.5 border-l-4 ${stripe} ${rowTint} transition-colors flex flex-col gap-2 animate-card-in stagger-${(index % 8) + 1} gpu-layer`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">

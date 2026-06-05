@@ -588,7 +588,7 @@ export default function CustomerPortal() {
         {/* Profile card */}
         <div className="card overflow-hidden">
           <div className="flex items-start gap-4 p-5">
-            <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden">
+            <div className="w-20 h-20 rounded-2xl border border-surface-4 flex-shrink-0 relative overflow-hidden animate-photo-in gpu-layer">
               <div className="absolute inset-0 bg-amber-50 flex items-center justify-center">
                 <span className="text-3xl font-bold text-amber-400 font-display select-none leading-none">
                   {customer?.customer_name?.[0]?.toUpperCase() ?? '?'}
@@ -599,6 +599,9 @@ export default function CustomerPortal() {
                   src={ibbDirect(customer.customer_photo_url)}
                   alt="Photo"
                   className="absolute inset-0 w-full h-full object-cover"
+                  loading="eager"
+                  decoding="async"
+                  style={{ imageRendering: '-webkit-optimize-contrast' } as React.CSSProperties}
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
               )}

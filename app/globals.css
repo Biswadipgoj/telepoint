@@ -11,6 +11,9 @@ body {
   font-family: 'Inter', 'Noto Sans Bengali', 'Noto Sans Devanagari', system-ui, sans-serif; line-height: 1.5;
   overflow-x: hidden; /* Prevent horizontal scroll on mobile */
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -87,11 +90,15 @@ button, .badge, .btn, .tab, .nav-link, .nav-link-active, th {
   .modal-backdrop {
     @apply fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4
            bg-ink/40 backdrop-blur-sm;
+    overscroll-behavior: contain;
   }
   .modal-panel {
     @apply bg-white rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto
            shadow-modal;
-    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: slideUp 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
   }
 
   /* Table — responsive */
@@ -112,20 +119,63 @@ button, .badge, .btn, .tab, .nav-link, .nav-link-active, th {
 
 /* ── Animations ──────────────────────────────────────────── */
 @keyframes slideUp {
-  from { transform: translateY(100%); opacity: 0.5; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translate3d(0, 100%, 0); opacity: 0.5; }
+  to { transform: translate3d(0, 0, 0); opacity: 1; }
 }
 @keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { transform: scale3d(0.9, 0.9, 1); opacity: 0; }
+  to { transform: scale3d(1, 1, 1); opacity: 1; }
 }
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.animate-scale-in { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-.animate-fade-in { animation: fadeIn 0.3s ease; }
+@keyframes slideUpCard {
+  from { transform: translate3d(0, 24px, 0); opacity: 0; }
+  to { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+@keyframes scaleInPhoto {
+  from { transform: scale3d(0.85, 0.85, 1); opacity: 0; }
+  to { transform: scale3d(1, 1, 1); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.animate-scale-in {
+  animation: scaleIn 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
+}
+.animate-card-in {
+  animation: slideUpCard 0.35s cubic-bezier(0.25, 1, 0.5, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+.animate-photo-in {
+  animation: scaleInPhoto 0.4s cubic-bezier(0.25, 1, 0.5, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+/* Staggered delays for card lists */
+.stagger-1 { animation-delay: 0.03s; }
+.stagger-2 { animation-delay: 0.06s; }
+.stagger-3 { animation-delay: 0.09s; }
+.stagger-4 { animation-delay: 0.12s; }
+.stagger-5 { animation-delay: 0.15s; }
+.stagger-6 { animation-delay: 0.18s; }
+.stagger-7 { animation-delay: 0.21s; }
+.stagger-8 { animation-delay: 0.24s; }
+/* GPU promotion utility */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
 
 /* ── Layout ──────────────────────────────────────────────── */
 .page-bg {
@@ -147,8 +197,9 @@ button, .badge, .btn, .tab, .nav-link, .nav-link-active, th {
 
 /* ── Mobile-First Responsive ─────────────────────────────── */
 @media (max-width: 640px) {
-  /* Touch targets */
-  button, a[role="button"], select { min-height: 44px; }
+  /* Touch targets + fast tap */
+  button, a[role="button"], select { min-height: 44px; touch-action: manipulation; }
+  a, button { touch-action: manipulation; }
 
   /* Table → compact on mobile */
   .tbl td, .tbl th,
@@ -203,11 +254,25 @@ button, .badge, .btn, .tab, .nav-link, .nav-link-active, th {
 /* Safe area for bottom nav */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-/* Skeleton loading */
-@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+/* Skeleton loading — GPU-accelerated shimmer */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
 .skeleton {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-  background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite; border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(226,232,240,0.6), transparent);
+  animation: shimmer 1.5s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* Print */

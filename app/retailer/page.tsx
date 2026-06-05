@@ -12,6 +12,7 @@ import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
 import PaymentModal from '@/components/PaymentModal';
+import { SearchResultsSkeleton } from '@/components/SkeletonLoaders';
 import toast from 'react-hot-toast';
 import { format, differenceInDays } from 'date-fns';
 import Link from 'next/link';
@@ -362,8 +363,11 @@ export default function RetailerDashboard() {
           </div>
         )}
 
+        {/* Search loading skeleton */}
+        {searchLoading && <SearchResultsSkeleton count={3} />}
+
         {/* Search results list */}
-        {searchResults !== null && searchResults.length === 0 && (
+        {!searchLoading && searchResults !== null && searchResults.length === 0 && (
           <div className="text-center py-16 animate-fade-in">
             <p className="text-ink-muted">No customers found. Try a different search.</p>
           </div>
@@ -375,7 +379,7 @@ export default function RetailerDashboard() {
               <span className="text-xs text-ink-muted uppercase tracking-widest">{searchResults.length} customers found — tap a card to view</span>
             </div>
             <div className="divide-y divide-surface-3">
-              {searchResults.map(c => {
+              {searchResults.map((c, index) => {
                 const rowTint =
                   c.status === 'RUNNING'  ? 'hover:bg-emerald-50' :
                   c.status === 'SETTLED'  ? 'hover:bg-amber-50' :
@@ -395,10 +399,10 @@ export default function RetailerDashboard() {
                     ? <span className="badge bg-rose-100 text-rose-800 border border-rose-300">⚠ NPA</span>
                     : <span className="badge bg-sky-100 text-sky-800 border border-sky-300">✓ Complete</span>;
                 return (
-                  <button
+                    <button
                     key={c.id}
                     onClick={() => selectCustomer(c)}
-                    className={`w-full text-left px-4 py-3.5 border-l-4 ${stripe} ${rowTint} transition-colors flex flex-col gap-2`}
+                    className={`w-full text-left px-4 py-3.5 border-l-4 ${stripe} ${rowTint} transition-colors flex flex-col gap-2 animate-card-in stagger-${(index % 8) + 1} gpu-layer`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

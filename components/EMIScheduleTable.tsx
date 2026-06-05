@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo, memo } from 'react';
 import { EMISchedule } from '@/lib/types';
 import { format, differenceInDays, addDays } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
@@ -72,7 +72,7 @@ export default function EMIScheduleTable({
   });
   const [saving, setSaving] = useState(false);
 
-  const sortedEmis = [...emis].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+  const sortedEmis = useMemo(() => [...emis].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()), [emis]);
   const paidCount  = sortedEmis.filter(e => e.status === 'APPROVED').length;
   const maxEmiNo   = sortedEmis.length > 0 ? Math.max(...sortedEmis.map(e => e.emi_no)) : 0;
 
@@ -840,7 +840,7 @@ export default function EMIScheduleTable({
 }
 
 // ── Status badge ─────────────────────────────────────────────────────────
-function StatusBadge({ emi, isOverdue }: { emi: EMISchedule; isOverdue: boolean }) {
+const StatusBadge = memo(function StatusBadge({ emi, isOverdue }: { emi: EMISchedule; isOverdue: boolean }) {
   if (emi.status === 'APPROVED') {
     return <span className="badge bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold whitespace-nowrap">✓ EMI PAID</span>;
   }
@@ -853,5 +853,5 @@ function StatusBadge({ emi, isOverdue }: { emi: EMISchedule; isOverdue: boolean 
   // UNPAID
   return isOverdue
     ? <span className="badge bg-rose-100 text-rose-800 border border-rose-300 font-bold whitespace-nowrap">⚠ OVERDUE</span>
-    : <span className="badge bg-slate-100 text-slate-700 border border-slate-300 font-semibold whitespace-nowrap">UNPAID</span>;
-}
+    : <span className="badge bg-surface-3 text-ink-muted border border-surface-4 font-bold whitespace-nowrap">UNPAID</span>;
+});
