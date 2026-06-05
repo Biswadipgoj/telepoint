@@ -1,6 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="32" fill="#eab308"/>
-  <path d="M96 32L48 60v72l48 28 48-28V60L96 32z" stroke="white" stroke-width="6" fill="rgba(255,255,255,0.2)"/>
-  <circle cx="96" cy="84" r="16" fill="white"/>
-  <text x="96" y="148" text-anchor="middle" fill="white" font-size="24" font-family="system-ui" font-weight="bold">EMI</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" fill="none">
+  <defs>
+    <linearGradient id="tp-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b3e7d"/>
+      <stop offset="1" stop-color="#0a1f44"/>
+    </linearGradient>
+    <linearGradient id="tp-blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5cc6ff"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="44" fill="url(#tp-bg)"/>
+  <g transform="rotate(-28 96 92)">
+    <ellipse cx="96" cy="92" rx="78" ry="33" fill="none" stroke="url(#tp-blue)" stroke-width="7" opacity="0.95"/>
+  </g>
+  <circle cx="150" cy="46" r="8" fill="#8ad4ff"/>
+  <rect x="44" y="42" width="104" height="28" rx="9" fill="#ffffff"/>
+  <rect x="80" y="60" width="30" height="84" rx="9.5" fill="#ffffff"/>
+  <rect x="95" y="66" width="15" height="72" rx="6.5" fill="url(#tp-blue)"/>
+  <text x="96" y="172" text-anchor="middle" fill="#e2e8f0" font-size="22" font-family="system-ui, sans-serif" font-weight="700" letter-spacing="1">TELEPOINT</text>
 </svg>

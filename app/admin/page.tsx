@@ -12,15 +12,17 @@ import RetailerPaymentSummary from '@/components/RetailerPaymentSummary';
 import CustomerFormModal from '@/components/CustomerFormModal';
 import EMIScheduleTable from '@/components/EMIScheduleTable';
 import DueBreakdownPanel from '@/components/DueBreakdownPanel';
+import SmartAlertPopup from '@/components/SmartAlertPopup';
 import PaymentModal from '@/components/PaymentModal';
 import { SearchResultsSkeleton } from '@/components/SkeletonLoaders';
+import AnalysisDashboard from '@/components/AnalysisDashboard';
 import toast from 'react-hot-toast';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import BottomNav from '@/components/BottomNav';
 import { addDays, subMonths, format, differenceInDays } from 'date-fns';
 import { formatCurrency, formatDateOnly, readJsonSafe } from '@/lib/formatters';
 
-type Tab = 'search' | 'retailers' | 'reports' | 'broadcast';
+type Tab = 'search' | 'retailers' | 'reports' | 'analysis' | 'broadcast';
 
 interface FilteredEMI {
   id: string;
@@ -424,6 +426,7 @@ export default function AdminDashboard() {
             { key: 'search', label: '🔍 Search' },
             { key: 'retailers', label: '🏪 Shops' },
             { key: 'reports', label: '📊 Reports' },
+            { key: 'analysis', label: '📈 Analysis' },
             { key: 'broadcast', label: '📢 Alerts' },
           ] as const).map((t) => (
             <button
@@ -591,6 +594,18 @@ export default function AdminDashboard() {
                   baseFine={fineSettings.default_fine_amount}
                   weeklyIncrement={fineSettings.weekly_fine_increment}
                 />
+
+                {/* Smart alert popup — EMI due in 5 days / fine due / 1st EMI charge pending */}
+                {breakdown && (
+                  <SmartAlertPopup
+                    key={selectedCustomer.id}
+                    fineDue={breakdown.fine_due ?? 0}
+                    daysUntilDue={breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null}
+                    nextEmiNo={breakdown.next_emi_no}
+                    nextEmiAmount={breakdown.next_emi_amount}
+                    firstChargeDue={breakdown.first_emi_charge_due ?? 0}
+                  />
+                )}
                 {breakdown && (() => {
                   const daysLeft = breakdown.next_emi_due_date ? differenceInDays(new Date(breakdown.next_emi_due_date), new Date()) : null;
                   return (
@@ -909,7 +924,7 @@ export default function AdminDashboard() {
 
               <p className="section-header">Download Customers</p>
               <p className="text-xs text-ink-muted mb-4">
-                The <strong>All Customers</strong> Excel export is a single .xlsx workbook with two tabs — Running and Complete. CSV downloads remain available for legacy use.
+                The <strong>All Customers</strong> Excel export is a single .xlsx workbook with one tab per status — Running, Complete, Settled and NPA — so every customer is included. CSV downloads remain available for legacy use.
               </p>
               <div className="flex flex-wrap gap-3">
                 <a
@@ -920,7 +935,7 @@ export default function AdminDashboard() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
                   </svg>
-                  📗 All Customers (Excel · 2 tabs)
+                  📗 All Customers (Excel · 4 tabs)
                 </a>
                 <a
                   href="/api/export?type=running"
@@ -1118,6 +1133,12 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* ===== ANALYSIS TAB ===== */}
+        {tab === 'analysis' && (
+          <AnalysisDashboard supabase={supabase} />
+        )}
+
         {/* ===== BROADCAST TAB ===== */}
         {tab === 'broadcast' && (
           <div className="space-y-6 animate-fade-in">
@@ -1503,66 +1524,31 @@ function MetricDashboard({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at');
-      const { data: emis } = await supabase
-        .from('emi_schedule')
-        .select('customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount');
-
-      const emiList = (emis as EMISchedule[]) || [];
-      const byCustomer = new Map<string, EMISchedule[]>();
-      for (const e of emiList) {
-        const arr = byCustomer.get(e.customer_id) || [];
-        arr.push(e);
-        byCustomer.set(e.customer_id, arr);
+      // Computed server-side over EVERY row (service client, no RLS, no 1000-row
+      // truncation). The old in-browser whole-table scan both undercounted at
+      // scale and could fail outright on big portfolios — leaving the dashboard
+      // blank. Now we just render a tiny totals payload.
+      const res = await fetch('/api/metrics', { cache: 'no-store' });
+      if (!res.ok) {
+        const e = await readJsonSafe<{ error?: string }>(res);
+        throw new Error(e?.error || `Metrics failed (${res.status})`);
       }
-
-      let loanAmount = 0, emiDue = 0, fineDue = 0, firstEmiChargeDue = 0,
-          emiCollected = 0, fineCollected = 0, firstEmiChargeCollected = 0;
-
-      // An APPROVED EMI is fully paid even if partial_paid_amount was never
-      // written (e.g. settlement / direct-approve paths set status only).
-      // Treat it as the full amount so collection reflects real payments.
-      const emiPaid = (e: EMISchedule) =>
-        e.status === 'APPROVED'
-          ? Number(e.amount || 0)
-          : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
-
-      for (const c of (customers as Customer[]) || []) {
-        const custEmis = byCustomer.get(c.id) || [];
-        const custFineDue = calculateTotalFineFromEmis(custEmis, baseFine, weeklyIncrement);
-        const custEmiDue = custEmis.reduce(
-          (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
-          0,
-        );
-
-        // 1st EMI charge: a one-time charge with both a due and a collected
-        // side. Previously only the due side was tracked, so paid charges
-        // silently dropped out of total collection.
-        const chargeAmount = Number(c.first_emi_charge_amount || 0);
-        const chargePaid = !!c.first_emi_charge_paid_at;
-        const custFirstChargeDue = chargeAmount > 0 && !chargePaid ? chargeAmount : 0;
-        const custFirstChargeCollected = chargeAmount > 0 && chargePaid ? chargeAmount : 0;
-
-        const loanFinished = c.status !== 'RUNNING';
-        const allFinesCleared = custFineDue <= 0 && custFirstChargeDue <= 0;
-        if (loanFinished && allFinesCleared) continue;
-
-        loanAmount              += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        emiDue                  += custEmiDue;
-        fineDue                 += custFineDue;
-        firstEmiChargeDue       += custFirstChargeDue;
-        emiCollected            += custEmis.reduce((s, e) => s + emiPaid(e), 0);
-        fineCollected           += custEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
-        firstEmiChargeCollected += custFirstChargeCollected;
-      }
-
-      setMetrics({ loanAmount, emiDue, fineDue, firstEmiChargeDue, emiCollected, fineCollected, firstEmiChargeCollected });
+      const d = await res.json();
+      setMetrics({
+        loanAmount: d.loanAmount,
+        emiDue: d.emiDue,
+        fineDue: d.fineDue,
+        firstEmiChargeDue: d.firstChargeDue,
+        emiCollected: d.emiCollected,
+        fineCollected: d.fineCollected,
+        firstEmiChargeCollected: d.firstChargeCollected,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load metrics');
     } finally {
       setLoading(false);
     }
-  }, [supabase, baseFine, weeklyIncrement]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

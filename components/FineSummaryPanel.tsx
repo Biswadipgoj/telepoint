@@ -50,12 +50,15 @@ export default function FineSummaryPanel({
                 <div className="flex justify-between text-xs"><span className="text-ink-muted">Base Fine{r.isLastEmi ? ' (repeating)' : ''}</span><span className="num">{fmt(r.baseFineTotal)}</span></div>
                 {r.weeklyFine > 0 && <div className="flex justify-between text-xs"><span className="text-ink-muted">Weekly ₹25</span><span className="num">{fmt(r.weeklyFine)}</span></div>}
                 <div className="flex justify-between text-sm font-semibold"><span className="text-danger">Total Fine</span><span className="num text-danger">{fmt(r.totalFine)}</span></div>
-                {r.paid > 0 && (
+                {r.paid > 0 && (<>
                   <div className="flex justify-between text-xs">
-                    <span className="text-success">Paid{emi?.fine_paid_at ? ` on ${format(new Date(emi.fine_paid_at), 'd MMM yyyy')}` : ''}</span>
+                    <span className="text-success">Paid{emi?.fine_paid_at ? ` on ${format(new Date(emi.fine_paid_at), 'd MMM yyyy, h:mm a')}` : ''}</span>
                     <span className="num text-success">-{fmt(r.paid)}</span>
                   </div>
-                )}
+                  {(emi?.fine_utr || emi?.utr) && (
+                    <div className="text-[10px] font-mono text-ink-muted">Fine UTR {emi?.fine_utr || emi?.utr}</div>
+                  )}
+                </>)}
                 <div className="flex justify-between text-sm font-bold"><span className="text-danger">Remaining</span><span className="num text-danger">{fmt(r.remaining)}</span></div>
               </div>
             );})}

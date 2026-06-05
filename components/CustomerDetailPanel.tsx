@@ -75,13 +75,27 @@ const CustomerDetailPanel = memo(function CustomerDetailPanel({ customer, paidCo
     return url;
   }
 
-  const docs = useMemo(() => [
-    { label: 'Customer Photo', url: customer.customer_photo_url },
-    { label: 'Aadhaar Front', url: customer.aadhaar_front_url },
-    { label: 'Aadhaar Back', url: customer.aadhaar_back_url },
-    { label: 'Bill', url: customer.bill_photo_url },
-    { label: 'EMI Card', url: customer.emi_card_photo_url },
-  ].filter(d => d.url), [customer.customer_photo_url, customer.aadhaar_front_url, customer.aadhaar_back_url, customer.bill_photo_url, customer.emi_card_photo_url]);
+  // Retailers may only see the customer's photo. Aadhaar / bill / EMI-card
+  // images are sensitive KYC documents and stay admin-only.
+  const docs = useMemo(() => (isAdmin
+    ? [
+        { label: 'Customer Photo', url: customer.customer_photo_url },
+        { label: 'Aadhaar Front', url: customer.aadhaar_front_url },
+        { label: 'Aadhaar Back', url: customer.aadhaar_back_url },
+        { label: 'Bill', url: customer.bill_photo_url },
+        { label: 'EMI Card', url: customer.emi_card_photo_url },
+      ]
+    : [
+        { label: 'Customer Photo', url: customer.customer_photo_url },
+      ]
+  ).filter(d => d.url), [
+    isAdmin,
+    customer.customer_photo_url,
+    customer.aadhaar_front_url,
+    customer.aadhaar_back_url,
+    customer.bill_photo_url,
+    customer.emi_card_photo_url
+  ]);
 
   return (
     <div className="card overflow-hidden animate-fade-in">

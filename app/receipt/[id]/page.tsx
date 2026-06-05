@@ -157,6 +157,9 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
               {request.mode === 'UPI' && (
                 <KV label="UPI ID" value="biswajit.khanra82@axl" mono small />
               )}
+              {request.utr && (
+                <KV label="UTR / Reference" value={request.utr} mono small />
+              )}
               <KV label="Collected By" value={retailer?.name ?? '—'} />
               <KV label="Submitted On" value={formatInTimeZone(new Date(request.created_at), 'Asia/Kolkata', 'd MMM yyyy, h:mm a')} mono small />
               {request.approved_at && (

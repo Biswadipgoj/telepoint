@@ -124,7 +124,7 @@ function computeEmiUpdate(emi: EmiRow, deltaAmount: number, paidAt: string | nul
   return update;
 }
 
-async function applyFineToEmi(svc: Svc, customerId: string, emiNo: number, delta: number, paidAt: string | null) {
+async function applyFineToEmi(svc: Svc, customerId: string, emiNo: number, delta: number, paidAt: string | null, utr?: string | null, mode?: string | null) {
   if (!delta) return;
   const { data: target } = await svc.from('emi_schedule')
     .select('id, fine_paid_amount, fine_paid_at')
@@ -137,6 +137,26 @@ async function applyFineToEmi(svc: Svc, customerId: string, emiNo: number, delta
     fine_paid_amount: nextPaid,
     fine_paid_at: nextPaid > 0 ? (paidAt ?? target.fine_paid_at ?? new Date().toISOString()) : null,
   }).eq('id', target.id);
+
+  // Best-effort: stamp / clear the fine's UTR + method (emi_schedule.fine_utr /
+  // fine_mode, migrations 019 & 021). Kept as separate, error-tolerant writes so
+  // a not-yet-applied migration can never break the core fine_paid_amount /
+  // fine_paid_at update above. Only set when currently NULL to mirror the DB
+  // function's COALESCE(fine_utr, …) / COALESCE(fine_mode, …).
+  try {
+    if (nextPaid > 0) {
+      if (utr) await svc.from('emi_schedule').update({ fine_utr: utr }).eq('id', target.id).is('fine_utr', null);
+    } else {
+      await svc.from('emi_schedule').update({ fine_utr: null }).eq('id', target.id);
+    }
+  } catch { /* fine_utr column may not exist yet — ignore */ }
+  try {
+    if (nextPaid > 0) {
+      if (mode) await svc.from('emi_schedule').update({ fine_mode: mode }).eq('id', target.id).is('fine_mode', null);
+    } else {
+      await svc.from('emi_schedule').update({ fine_mode: null }).eq('id', target.id);
+    }
+  } catch { /* fine_mode column may not exist yet — ignore */ }
 }
 
 async function adjustFineForRequest(svc: Svc, request: RequestRow, signedTotal: number, paidAt: string | null) {
@@ -148,7 +168,7 @@ async function adjustFineForRequest(svc: Svc, request: RequestRow, signedTotal: 
     for (const entry of request.fine_breakdown) {
       const amount = toNumber(entry.amount);
       if (amount <= 0) continue;
-      await applyFineToEmi(svc, request.customer_id, Number(entry.emi_no), sign * amount, paidAt);
+      await applyFineToEmi(svc, request.customer_id, Number(entry.emi_no), sign * amount, paidAt, request.utr ?? null, request.mode ?? null);
     }
     return;
   }
@@ -170,7 +190,7 @@ async function adjustFineForRequest(svc: Svc, request: RequestRow, signedTotal: 
     targetEmiNo = fallback?.emi_no ?? null;
   }
   if (!targetEmiNo) return;
-  await applyFineToEmi(svc, request.customer_id, targetEmiNo, signedTotal, paidAt);
+  await applyFineToEmi(svc, request.customer_id, targetEmiNo, signedTotal, paidAt, request.utr ?? null, request.mode ?? null);
 }
 
 async function adjustFirstChargeForRequest(svc: Svc, request: RequestRow, apply: boolean, paidAt: string | null) {

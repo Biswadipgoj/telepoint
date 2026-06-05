@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
 
   const { data: emis } = await svc.from('emi_schedule')
-    .select('id, emi_no, due_date, amount, status, paid_at, mode, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
+    .select('id, emi_no, due_date, amount, status, paid_at, mode, utr, partial_paid_amount, partial_paid_at, fine_amount, fine_waived, fine_paid_amount, fine_paid_at')
     .eq('customer_id', customer.id).order('emi_no');
 
   let breakdown = null;
@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
   const { data: broadcasts } = await svc.from('broadcast_messages')
     .select('id, message, image_url, expires_at, sender_name, sender_role')
     .eq('target_retailer_id', customer.retailer_id)
+    .or(`target_customer_id.is.null,target_customer_id.eq.${customer.id}`)
     .gte('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 

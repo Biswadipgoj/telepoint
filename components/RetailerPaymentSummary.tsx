@@ -13,26 +13,16 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
-import { EMISchedule } from '@/lib/types';
 import { formatCurrency } from '@/lib/formatters';
 import { PaymentSummarySkeleton } from './SkeletonLoaders';
-
-type Customer = {
-  id: string;
-  status: string;
-  purchase_value: number;
-  down_payment: number;
-  first_emi_charge_amount: number;
-  first_emi_charge_paid_at?: string | null;
-};
 
 interface Props {
   retailerId: string;
   retailerName?: string;
   baseFine: number;
   weeklyIncrement: number;
+  /** When true, the "Loan Book" tile is hidden (retailer view — super admin only). */
+  hideLoanAmount?: boolean;
 }
 
 interface Totals {
@@ -51,113 +41,42 @@ interface Totals {
 
 const fmt = formatCurrency;
 
-export default function RetailerPaymentSummary({ retailerId, retailerName, baseFine, weeklyIncrement }: Props) {
+export default function RetailerPaymentSummary({ retailerId, retailerName, baseFine, weeklyIncrement, hideLoanAmount = false }: Props) {
   const [totals, setTotals] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const supabase = createClient();
     setLoading(true);
     try {
-      const { data: customers } = await supabase
-        .from('customers')
-        .select('id, status, purchase_value, down_payment, first_emi_charge_amount, first_emi_charge_paid_at')
-        .eq('retailer_id', retailerId);
-
-      const customerList = (customers as Customer[] | null) ?? [];
-      if (!customerList.length) {
-        setTotals({
-          customerCount: 0, runningCount: 0, loanAmount: 0, collected: 0,
-          emiDue: 0, fineDue: 0, fineCollected: 0, firstChargeDue: 0, firstChargeCollected: 0,
-          upcoming30d: 0, overdueCustomers: 0,
-        });
-        return;
+      // Computed server-side over the retailer's ENTIRE portfolio (service
+      // client — no RLS, no 1000-row truncation, no URL-length limit). The old
+      // in-browser scan of a 1000+ customer retailer like MAMA TELECOM read a
+      // truncated slice and produced wrong totals. Now we just render the result.
+      const res = await fetch(`/api/metrics?retailer_id=${encodeURIComponent(retailerId)}`, { cache: 'no-store' });
+      if (!res.ok) {
+        const e = await res.json().catch(() => null);
+        throw new Error(e?.error || `Summary failed (${res.status})`);
       }
-
-      const ids = customerList.map(c => c.id);
-      const { data: emis } = await supabase
-        .from('emi_schedule')
-        .select('id, customer_id, emi_no, due_date, amount, status, partial_paid_amount, fine_amount, fine_waived, fine_paid_amount')
-        .in('customer_id', ids);
-
-      const emiList = (emis as EMISchedule[] | null) ?? [];
-      const byCustomer = new Map<string, EMISchedule[]>();
-      for (const e of emiList) {
-        const list = byCustomer.get(e.customer_id) ?? [];
-        list.push(e);
-        byCustomer.set(e.customer_id, list);
-      }
-
-      const todayMs = Date.now();
-      const in30Ms = todayMs + 30 * 86_400_000;
-
-      let loanAmount = 0, collected = 0, emiDue = 0, fineDue = 0, fineCollected = 0,
-          firstChargeDue = 0, firstChargeCollected = 0, upcoming30d = 0, overdueCustomers = 0;
-      let runningCount = 0;
-
-      for (const c of customerList) {
-        const cEmis = byCustomer.get(c.id) ?? [];
-        const cFineDue = calculateTotalFineFromEmis(cEmis, baseFine, weeklyIncrement);
-        // An APPROVED EMI is fully paid even if partial_paid_amount was never
-        // written (settlement / direct-approve paths set status only), so count
-        // its full amount as collected rather than leaving it perpetually due.
-        const emiPaid = (e: EMISchedule) =>
-          e.status === 'APPROVED'
-            ? Number(e.amount || 0)
-            : Math.min(Number(e.amount || 0), Number(e.partial_paid_amount || 0));
-        const cEmiDue = cEmis.reduce(
-          (s, e) => s + Math.max(0, Number(e.amount || 0) - emiPaid(e)),
-          0,
-        );
-        const loanFinished = c.status !== 'RUNNING';
-        const allFinesCleared = cFineDue <= 0;
-        if (loanFinished && allFinesCleared) continue;
-
-        if (c.status === 'RUNNING') runningCount += 1;
-
-        loanAmount += Math.max(0, Number(c.purchase_value || 0) - Number(c.down_payment || 0));
-        collected += cEmis.reduce((s, e) => s + emiPaid(e), 0);
-        emiDue += cEmiDue;
-        fineDue += cFineDue;
-        fineCollected += cEmis.reduce((s, e) => s + Number(e.fine_paid_amount || 0), 0);
-
-        // 1st EMI charge has both a due and a collected side; track both so it
-        // is reflected in total collection once paid.
-        const chargeAmount = Number(c.first_emi_charge_amount || 0);
-        if (chargeAmount > 0) {
-          if (c.first_emi_charge_paid_at) firstChargeCollected += chargeAmount;
-          else firstChargeDue += chargeAmount;
-        }
-
-        let custOverdue = false;
-        for (const e of cEmis) {
-          if (e.status === 'APPROVED') continue;
-          const due = new Date(e.due_date).getTime();
-          if (due < todayMs) custOverdue = true;
-          if (due >= todayMs && due <= in30Ms) {
-            upcoming30d += Math.max(0, Number(e.amount || 0) - Number(e.partial_paid_amount || 0));
-          }
-        }
-        if (custOverdue) overdueCustomers += 1;
-      }
-
+      const d = await res.json();
       setTotals({
-        customerCount: customerList.length,
-        runningCount,
-        loanAmount,
-        collected,
-        emiDue,
-        fineDue,
-        fineCollected,
-        firstChargeDue,
-        firstChargeCollected,
-        upcoming30d,
-        overdueCustomers,
+        customerCount: d.customerCount,
+        runningCount: d.runningCount,
+        loanAmount: d.loanAmount,
+        collected: d.emiCollected,
+        emiDue: d.emiDue,
+        fineDue: d.fineDue,
+        fineCollected: d.fineCollected,
+        firstChargeDue: d.firstChargeDue,
+        firstChargeCollected: d.firstChargeCollected,
+        upcoming30d: d.upcoming30d,
+        overdueCustomers: d.overdueCustomers,
       });
+    } catch {
+      setTotals(null);
     } finally {
       setLoading(false);
     }
-  }, [retailerId, baseFine, weeklyIncrement]);
+  }, [retailerId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -193,8 +112,10 @@ export default function RetailerPaymentSummary({ retailerId, retailerName, baseF
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-4">
-        <Tile tint="violet" emoji="💰" label="Loan Book" value={fmt(t.loanAmount)} sub="Total disbursed (active)" />
+      <div className={`grid grid-cols-2 ${hideLoanAmount ? 'md:grid-cols-3' : 'md:grid-cols-4'} gap-px bg-surface-4`}>
+        {!hideLoanAmount && (
+          <Tile tint="violet" emoji="💰" label="Loan Book" value={fmt(t.loanAmount)} sub="Total disbursed (active)" />
+        )}
         <Tile tint="emerald" emoji="✓" label="Collected" value={fmt(totalRevenueCollected)} sub="EMI + Fines + 1st Charge" />
         <Tile tint={t.emiDue > 0 ? 'rose' : 'emerald'} emoji="⏳" label="EMI Due" value={fmt(t.emiDue)} sub={`${t.overdueCustomers} customer${t.overdueCustomers === 1 ? '' : 's'} overdue`} />
         <Tile tint={t.fineDue > 0 ? 'rose' : 'emerald'} emoji="⚠" label="Fine Due" value={fmt(t.fineDue)} sub={`Paid ${fmt(t.fineCollected)} so far`} />

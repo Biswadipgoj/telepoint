@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import Logo from '@/components/Logo';
 
 interface NavBarProps { role: 'admin' | 'retailer'; userName?: string; pendingCount?: number; }
 
@@ -27,13 +28,8 @@ const NavBar = memo(function NavBar({ role, pendingCount = 0 }: NavBarProps) {
       <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
         {/* Logo */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 32 32" fill="none">
-              <path d="M16 2L2 9V23L16 30L30 23V9L16 2Z" stroke="white" strokeWidth="2.5" fill="rgba(255,255,255,0.2)" />
-              <circle cx="16" cy="14" r="4" fill="white" />
-            </svg>
-          </div>
-          <span className="font-display font-bold text-ink text-base hidden sm:inline">EMI Portal</span>
+          <Logo size={32} className="rounded-lg shadow-sm" />
+          <span className="font-display font-bold text-ink text-base inline tracking-tight">Telepoint</span>
         </div>
 
         {/* Desktop nav links — hidden on mobile (BottomNav handles mobile) */}

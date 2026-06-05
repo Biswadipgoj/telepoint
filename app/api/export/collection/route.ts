@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { csvHeaders, csvCell, csvRow } from '@/lib/csv';
 import { calculateTotalFineFromEmis } from '@/lib/fineCalc';
 import { EMISchedule } from '@/lib/types';
+import { fetchAllByIds, fetchAllPaged } from '@/lib/dbFetch';
 
 const BOM = '﻿';
 
@@ -75,16 +76,15 @@ function buildRetailerSection(
     SECTION_HEADER,
   ];
 
-  // Include if: has any EMI in selected month OR has overdue UNPAID/PARTIALLY_PAID from previous months
-  const included = customers.filter(c => {
-    const emis = emisByCustomer.get(c.id) ?? [];
-    const hasThisMonth = emis.some(e => e.due_date >= startOfMonth && e.due_date <= endOfMonth);
-    const hasPrevOverdue = emis.some(
-      e => e.due_date < startOfMonth &&
-           (e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID'),
-    );
-    return hasThisMonth || hasPrevOverdue;
-  });
+  // Every active (RUNNING/NPA) customer belongs on their retailer's collection
+  // sheet, so the roster is complete. The old code only kept customers with an
+  // EMI due this month OR a prior overdue EMI, which silently dropped active
+  // accounts that still owe money in other ways — principal cleared but a fine
+  // or 1st-EMI charge outstanding, or a loan whose first EMI lands in a later
+  // month. Those customers exist in the DB and show up in search, so they must
+  // appear here too. Amount-due / fine-due below naturally read 0 (blank) when
+  // nothing is pending this month.
+  const included = [...customers];
 
   if (included.length === 0) return lines; // section header only, no data rows
 
@@ -111,6 +111,8 @@ function buildRetailerSection(
 
     // EMI amount due: sum remaining balances on all pending EMIs up to end of month.
     // For PARTIALLY_PAID EMIs this shows what still needs to be collected, not the full amount.
+    // Blank when nothing is pending — a fully-paid (but still RUNNING) customer
+    // owes ₹0 of EMI this month, so we must not fabricate one month's amount.
     const pendingEmis = emis.filter(e =>
       (e.status === 'UNPAID' || e.status === 'PARTIALLY_PAID') && e.due_date <= endOfMonth,
     );
@@ -119,7 +121,7 @@ function buildRetailerSection(
           (sum, e) => sum + Math.max(0, Number(e.amount) - Number(e.partial_paid_amount || 0)),
           0,
         )
-      : (c.emi_amount ?? '');
+      : '';
 
     lines.push(csvRow([
       c.imei,
@@ -215,26 +217,38 @@ export async function GET(req: NextRequest) {
   let isFirstSection = true;
 
   for (const retailer of retailerList) {
-    const { data: rawCustomers } = await svc
-      .from('customers')
-      .select(
-        'id, customer_name, mobile, alternate_number_1, imei, emi_amount, emi_due_day, ' +
-        'first_emi_charge_amount, first_emi_charge_paid_at',
-      )
-      .eq('retailer_id', retailer.id)
-      .eq('status', 'RUNNING');
-
-    const customers = (rawCustomers as CustomerRow[] | null) ?? [];
+    const customers = await fetchAllPaged<CustomerRow>((from, to) =>
+      svc
+        .from('customers')
+        .select(
+          'id, customer_name, mobile, alternate_number_1, imei, emi_amount, emi_due_day, ' +
+          'first_emi_charge_amount, first_emi_charge_paid_at',
+        )
+        .eq('retailer_id', retailer.id)
+        // RUNNING + NPA: NPA accounts are defaulted but still owe money, so they
+        // belong on a collection sheet. (Previously RUNNING-only, which silently
+        // dropped defaulted customers that still show up in search.)
+        .in('status', ['RUNNING', 'NPA'])
+        .order('id')
+        .range(from, to) as unknown as PromiseLike<{ data: CustomerRow[] | null; error: { message: string } | null }>,
+    );
     if (customers.length === 0) continue;
 
-    const { data: rawEmis } = await svc
-      .from('emi_schedule')
-      .select('customer_id, emi_no, due_date, amount, status, fine_amount, fine_waived, fine_paid_amount, partial_paid_amount')
-      .in('customer_id', customers.map(c => c.id))
-      .order('emi_no');
+    const custIds = customers.map(c => c.id);
+    // Order by (customer_id, emi_no) — a unique pair — so pagination never
+    // repeats or skips a row across page boundaries.
+    const rawEmis = await fetchAllByIds<EmiRow>(custIds, (chunk, from, to) =>
+      svc
+        .from('emi_schedule')
+        .select('customer_id, emi_no, due_date, amount, status, fine_amount, fine_waived, fine_paid_amount, partial_paid_amount')
+        .in('customer_id', chunk)
+        .order('customer_id')
+        .order('emi_no')
+        .range(from, to) as unknown as PromiseLike<{ data: EmiRow[] | null; error: { message: string } | null }>,
+    );
 
     const emisByCustomer = new Map<string, EmiRow[]>();
-    for (const e of (rawEmis as EmiRow[] | null) ?? []) {
+    for (const e of rawEmis) {
       const list = emisByCustomer.get(e.customer_id) ?? [];
       list.push(e);
       emisByCustomer.set(e.customer_id, list);

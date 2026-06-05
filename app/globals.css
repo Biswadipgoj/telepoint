@@ -114,7 +114,17 @@ button, .badge, .btn, .tab, .nav-link, .nav-link-active, th {
   .nav-link-active { @apply nav-link bg-brand-50 text-brand-700 hover:bg-brand-100 hover:text-brand-700; }
 
   .stat-card { @apply card p-5; }
-  .num { @apply font-mono tabular-nums; }
+  /* Numbers use a clean-zero SANS stack with tabular figures for ledger-style
+     column alignment. We deliberately avoid `font-mono` / bare `monospace`
+     here: common system mono fallbacks (Consolas, SF Mono, DejaVu Sans Mono)
+     draw a slashed or dotted "0" that reads as a cut / struck-through zero.
+     Every font below renders a plain, fully-visible zero. `zero 0` disables
+     any slashed-zero opentype feature as a further safeguard. */
+  .num {
+    font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0;
+  }
 }
 
 /* ── Animations ──────────────────────────────────────────── */

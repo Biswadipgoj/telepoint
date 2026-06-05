@@ -875,6 +875,17 @@ export default function CustomerPortal() {
                     <div className="text-right">
                       <p className="text-xs text-jade-400 font-semibold">✓ Paid</p>
                       {e.paid_at && <p className="text-[10px] text-slate-500">{format(new Date(e.paid_at), 'd MMM yyyy')}</p>}
+                      {(() => {
+                        // Always show the method; derive it when `mode` is null
+                        // (UTR ⇒ UPI, otherwise a settled EMI was Cash).
+                        const method = e.mode || (e.utr ? 'UPI' : 'CASH');
+                        return (
+                          <p className="text-[10px] text-slate-500">
+                            {method === 'UPI' ? '🟢 UPI' : '💵 Cash'}
+                            {method === 'UPI' && e.utr ? <span className="font-mono"> · UTR {e.utr}</span> : ''}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
                 ))}
